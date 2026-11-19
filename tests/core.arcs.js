@@ -23,9 +23,12 @@ export function continuity(path, tol = 1e-6) {
       dir = [-sg * Math.sin(a1), sg * Math.cos(a1)];
     } else {
       const L = Math.hypot(s.x - x, s.y - y);
-      const d = [(s.x - x) / L, (s.y - y) / L];
-      if (dir) note(Math.acos(Math.max(-1, Math.min(1, d[0] * dir[0] + d[1] * dir[1]))));
-      dir = d;
+      // a straight under 0.01 mm has no heading worth reading once the plan is rounded to 1e-4 mm
+      if (L > 0.01) {
+        const d = [(s.x - x) / L, (s.y - y) / L];
+        if (dir) note(Math.acos(Math.max(-1, Math.min(1, d[0] * dir[0] + d[1] * dir[1]))));
+        dir = d;
+      }
     }
     x = s.x; y = s.y;
   }

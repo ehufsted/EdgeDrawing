@@ -23,7 +23,8 @@ import { generateSample } from './app/samples.js';
 const $ = (id) => document.getElementById(id);
 const STORE = 'edgedrawing.v1';
 
-const LEN_IDS = ['widthMm', 'heightMm', 'edgeScale', 'minFeature', 'minLength', 'simplify', 'lineWidth', 'minRadius'];
+const LEN_IDS = ['widthMm', 'heightMm', 'edgeScale', 'minFeature', 'minLength', 'simplify', 'lineWidth', 'minRadius', 'maxStray'];
+const BEND_IDS = ['joinShape', 'walk', 'bendFix', 'bendSmooth'];   // the bend experiments' selects
 
 /** The Edges & detail presets, mm (edgeAmount a share). */
 const DETAIL = {
@@ -264,6 +265,8 @@ function updatePieceNote() {
 function showJoin() {
   for (const b of document.querySelectorAll('#joinSeg button')) b.setAttribute('aria-pressed', String(b.dataset.join === state.s.join));
   $('oddRow').hidden = state.s.join !== 'euler';
+  $('walkRow').hidden = state.s.join !== 'euler';
+  for (const id of BEND_IDS) $(id).value = state.s[id];
   $('oddJoin').value = state.s.oddJoin;
   $('closed').checked = state.s.closed;
 }
@@ -307,6 +310,7 @@ function bindLine() {
     });
   }
   $('loops').addEventListener('change', () => { state.s.loops = $('loops').checked; scheduleRun(0); });
+  for (const id of BEND_IDS) $(id).addEventListener('change', () => { state.s[id] = $(id).value; scheduleRun(0); });
 }
 
 // ------------------------------------------------------------------- paint
@@ -585,6 +589,7 @@ function renderFigures() {
     row('Tightest bend', st.bends ? `${L(st.minR, U === 'in' ? 3 : 1)} ${unitLabel()} radius` : '—'),
     row('Tighter than the smallest bend', String(st.tight)),
     row('Corner loops', String(st.loops)),
+    row('Strays from the edges', `at most ${L(st.strayMax ?? 0, U === 'in' ? 3 : 1)}, on average ${L(st.strayMean ?? 0, U === 'in' ? 3 : 2)} ${unitLabel()}`),
     row('Crossings', String(st.crossings)),
     row('Edges found', `${st.chains} chains in ${st.components} ${st.components === 1 ? 'piece' : 'pieces'}`),
   ];

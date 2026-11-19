@@ -5,7 +5,8 @@
 //   B  the edges (core/edges.js) -> the edge graph, cleaned to the level of
 //      detail (core/graph.js)
 //   C  one line through it: Eulerian or travelling salesman (core/route.js)
-//   D  straights and arcs at the smallest bend radius, and the measurements
+//   D  straights and arcs at the smallest bend radius (with the bend options of
+//      core/bends.js), and the measurements
 //      (core/arcs.js)
 //
 // STAGES ARE CACHED (when a cache object is passed, as the worker does): each
@@ -30,7 +31,8 @@ import { luminance } from './core/color.js';
 import { cannyEdges } from './core/edges.js';
 import { traceGraph, cleanGraph, degrees } from './core/graph.js';
 import { routeGraph } from './core/route.js';
-import { routePolyline, fitArcs, pathStats, samplePath, crossings } from './core/arcs.js';
+import { pathStats, samplePath, crossings } from './core/arcs.js';
+import { fitLine } from './core/bends.js';
 
 /**
  * @param {{width,height,data}} rgba
@@ -70,32 +72,33 @@ export function runPipeline(rgba, settings, opts = {}) {
   const px = Math.sqrt(sx * sy);
 
   // B: the edge graph
-  // a line cannot bend round a detail much smaller than its bend: smoothed at two radii at least
-  const smooth = 2 * s.minRadius;
-  const keyB = [keyA, s.edgeScale, s.edgeAmount, s.minFeature, s.minLength, s.simplify, smooth];
+  // a line cannot bend round a detail much smaller than its bend: smoothed at two radii
+  // at least, or (bendSmooth 'tight') only where it turns tighter than the bend
+  const tightOnly = s.bendSmooth === 'tight' && s.minRadius > 0;
+  const smooth = tightOnly ? 0 : 2 * s.minRadius, tight = tightOnly ? s.minRadius : 0;
+  const keyB = [keyA, s.edgeScale, s.edgeAmount, s.minFeature, s.minLength, s.simplify, smooth, tight];
   const B = stage('B', keyB, () => {
     progress('finding edges');
     const E = cannyEdges(A.lum, w, h, s.edgeScale / px, s.edgeAmount);
     progress('tracing edges');
     const raw = traceGraph(E.edge, w, h, sx, sy);
-    const g = cleanGraph(raw, { minFeature: s.minFeature, minLength: s.minLength, simplify: s.simplify, smooth });
+    const g = cleanGraph(raw, { minFeature: s.minFeature, minLength: s.minLength, simplify: s.simplify, smooth, tight });
     return { graph: g, high: E.high };
   });
 
   // C: one line
   const start = s.start && isFinite(s.start.x) && isFinite(s.start.y) ? { x: s.start.x, y: s.start.y } : null;
-  const keyC = [keyB, s.join, s.oddJoin, start, s.closed];
+  const keyC = [keyB, s.join, s.oddJoin, start, s.closed, s.join === 'euler' ? s.walk : null];
   const C = stage('C', keyC, () => {
     progress(s.join === 'tsp' ? 'ordering the strokes' : 'joining into one line');
-    return routeGraph(B.graph, { join: s.join, oddJoin: s.oddJoin, start, closed: s.closed });
+    return routeGraph(B.graph, { join: s.join, oddJoin: s.oddJoin, start, closed: s.closed, walk: s.walk });
   });
 
   // D: straights and arcs
-  const keyD = [keyC, s.minRadius, s.simplify, s.loops, s.lineWidth];
+  const keyD = [keyC, s.minRadius, s.simplify, s.loops, s.lineWidth, s.joinShape, s.bendFix, s.maxStray];
   const D = stage('D', keyD, () => {
     progress('fitting arcs');
-    const { pts, kinds } = routePolyline(C.runs);
-    const fit = fitArcs(pts, kinds, { minRadius: s.minRadius, tol: s.simplify, loops: s.loops });
+    const fit = fitLine(C.runs, { minRadius: s.minRadius, tol: s.simplify, loops: s.loops, joins: s.joinShape, fix: s.bendFix, maxStray: s.maxStray });
     progress('measuring');
     const st = pathStats(fit.path);
     const X = fit.path.segs.length ? crossings(samplePath(fit.path), Math.max(1, 2 * s.lineWidth)) : [];
@@ -109,7 +112,7 @@ export function runPipeline(rgba, settings, opts = {}) {
   const stats = {
     length: st.length, edge: st.edge, retrace: st.retrace, join: st.join,
     bends: st.bends, minR: isFinite(st.minR) ? st.minR : 0,
-    tight: D.tight.length, loops: D.loops, crossings: D.crossings.length,
+    tight: D.tight.length, loops: D.loops, crossings: D.crossings.length, strayMax: D.stray.max, strayMean: D.stray.mean,
     chains: g.edges.length, merged: g.stats.merged, spurs: g.stats.spurs, pieces: g.stats.pieces,
     ...C.stats,
   };
@@ -135,6 +138,7 @@ export function runPipeline(rgba, settings, opts = {}) {
     path: { x0: r4(D.path.x0), y0: r4(D.path.y0), segs: D.path.segs.map(roundSeg) },
     start: C.start, end: C.end,
     tight: D.tight.map((t) => ({ x: r4(t.x), y: r4(t.y), r: r4(t.r) })),
+    strayAt: D.stray.at ? { x: r4(D.stray.at.x), y: r4(D.stray.at.y), d: r4(D.stray.max) } : null,
     crossings: D.crossings.map((c) => ({ x: r4(c.x), y: r4(c.y) })),
     stats,
     notes,

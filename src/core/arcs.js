@@ -13,8 +13,10 @@
 // gets a big arc and the curve comes back smooth; a sharp one, a real corner of
 // the image, gets a small arc and stays a corner. Never less than the smallest
 // bend radius. Two corners share each straight, so when their t's do not both
-// fit, the straight is split between them in proportion to what each wants,
-// and a corner's radius shrinks to what it got.
+// fit, each first gets what the smallest radius needs, the rest of the straight
+// is shared in proportion to what each wants beyond that, and a corner's radius
+// shrinks to what it got. (Shared simply in proportion, a nearly straight corner,
+// which wants a huge arc, took the room its sharp neighbour needed to bend at all.)
 //
 // A corner that cannot get the smallest radius is TIGHT. With corner loops on
 // (and the turn no sharper than LOOP_MAX: nearer a full reversal the loop would
@@ -55,12 +57,15 @@ export function routePolyline(runs) {
 /**
  * @param {number[]} pts     flat polyline, mm
  * @param {string[]} kinds   per segment
- * @param {{minRadius:number, tol:number, loops:boolean}} o
- * @returns {{path, tight:[{x, y, r}], loops:number}}
+ * @param {{minRadius:number, tol:number, loops:boolean, maxDev?:number}} o
+ *   maxDev: a corner whose arc would pass farther than this from it is tight (none by default)
+ * @returns {{path, tight:[{x, y, r, i}], loops:number}}   i: the vertex of pts
  */
 export function fitArcs(pts, kinds, o) {
+  ({ pts, kinds } = dedupe(pts, kinds));
   const m = pts.length / 2;
   const minR = Math.max(0, o.minRadius || 0), tol = Math.max(1e-3, o.tol || 0.3);
+  const maxDev = o.maxDev > 0 ? o.maxDev : Infinity;
   if (m < 2) return { path: { x0: pts[0] || 0, y0: pts[1] || 0, segs: [] }, tight: [], loops: 0 };
   // per segment: unit direction and length
   const ux = new Float64Array(m - 1), uy = new Float64Array(m - 1), len = new Float64Array(m - 1);
@@ -70,7 +75,7 @@ export function fitArcs(pts, kinds, o) {
     ux[i] = dx / len[i]; uy[i] = dy / len[i];
   }
   // per corner (vertex 1..m-2): turn θ, its side, the radius it wants, its tan(θ/2)
-  const th = new Float64Array(m), side = new Int8Array(m), want = new Float64Array(m), tn = new Float64Array(m);
+  const th = new Float64Array(m), side = new Int8Array(m), want = new Float64Array(m), tn = new Float64Array(m), near = new Float64Array(m);
   for (let i = 1; i < m - 1; i++) {
     const c = ux[i - 1] * ux[i] + uy[i - 1] * uy[i], s = ux[i - 1] * uy[i] - uy[i - 1] * ux[i];
     th[i] = Math.atan2(Math.abs(s), c);
@@ -79,7 +84,8 @@ export function fitArcs(pts, kinds, o) {
     const half = th[i] / 2;
     tn[i] = Math.tan(Math.min(half, Math.PI / 2 - 1e-6));
     const dev = 1 / Math.cos(Math.min(half, Math.PI / 2 - 1e-6)) - 1;
-    want[i] = Math.max(minR, tol / dev);
+    near[i] = tol / dev;
+    want[i] = Math.max(minR, near[i]);
   }
   // corners that will be loops take nothing from the straights; decided in two passes
   const isLoop = new Uint8Array(m);
@@ -90,7 +96,17 @@ export function fitArcs(pts, kinds, o) {
     const avail = new Float64Array(m).fill(Infinity);
     for (let s = 0; s < m - 1; s++) {
       const a = demand[s], b = demand[s + 1], L = len[s];
-      const fa = a + b > L ? (L * a) / (a + b) : a, fb = a + b > L ? (L * b) / (a + b) : b;
+      // what each needs for the smallest radius first, then the rest in proportion to
+      // what each wants beyond it (a gentle corner wants a huge arc, and must not
+      // take the room a sharp neighbour needs to bend at all)
+      const ra = Math.min(a, minR * tn[s]), rb = Math.min(b, minR * tn[s + 1]);
+      let fa = a, fb = b;
+      if (a + b > L) {
+        if (ra + rb <= L) {
+          const ea = a - ra, eb = b - rb, rest = L - ra - rb;
+          fa = ra + (ea + eb > 0 ? (rest * ea) / (ea + eb) : 0); fb = rb + (ea + eb > 0 ? (rest * eb) / (ea + eb) : 0);
+        } else { fa = (L * ra) / (ra + rb); fb = (L * rb) / (ra + rb); }
+      }
       avail[s] = Math.min(avail[s], fa);
       avail[s + 1] = Math.min(avail[s + 1], fb);
     }
@@ -100,6 +116,13 @@ export function fitArcs(pts, kinds, o) {
       if (th[i] < 1e-4 || isLoop[i]) continue;
       r[i] = Math.min(want[i], avail[i] / tn[i]);
       if (r[i] < minR - EPS && o.loops && minR > 0 && th[i] <= LOOP_MAX) { isLoop[i] = 1; changed = true; }
+      // a tight corner (no loop) keeps within the tolerance of its point, like any
+      // other: rounded with all the room it has, a near reversal would cut the
+      // stroke back by a whole straight for an arc of almost no radius
+      else if (r[i] < minR - EPS) r[i] = Math.min(r[i], near[i]);
+      // an arc that would pass farther than maxDev from its corner (the smallest bend
+      // in a sharp V cuts its tip off) counts as tight too, and keeps to the corner
+      else if (r[i] * (1 / Math.cos(Math.min(th[i] / 2, Math.PI / 2 - 1e-6)) - 1) > maxDev) r[i] = Math.min(r[i], near[i], minR - 2 * EPS);
     }
     if (!changed) break;
   }
@@ -135,7 +158,7 @@ export function fitArcs(pts, kinds, o) {
       continue;
     }
     const rad = r[i];
-    if (rad < minR - EPS) tight.push({ x: vx, y: vy, r: rad });
+    if (rad < minR - EPS) tight.push({ x: vx, y: vy, r: rad, i });
     if (rad < 1e-6) { lineTo(vx, vy, kin); continue; }
     const t = rad * tn[i];
     const t1x = vx - ux[i - 1] * t, t1y = vy - uy[i - 1] * t;
@@ -273,4 +296,15 @@ export function trimPath(path, upTo) {
     break;
   }
   return { x0: path.x0, y0: path.y0, segs };
+}
+
+/** A polyline without repeated points (a zero-length straight has no direction): each kept segment keeps its kind. */
+function dedupe(pts, kinds) {
+  const P = [pts[0], pts[1]], K = [];
+  for (let i = 2; i < pts.length; i += 2) {
+    if (Math.hypot(pts[i] - P[P.length - 2], pts[i + 1] - P[P.length - 1]) < 1e-9) continue;
+    P.push(pts[i], pts[i + 1]);
+    K.push(kinds[i / 2 - 1]);
+  }
+  return { pts: P, kinds: K };
 }

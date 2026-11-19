@@ -356,6 +356,48 @@
     </details>
 
     <details open>
+      <summary>Keeping to the bend (experiments)</summary>
+      <div class="body">
+        <div class="row" title="joins are not in the image, so they can take any shape: as Dubins paths they leave and meet the strokes tangentially, never tighter than the bend">
+          <label for="joinShape">Joins</label>
+          <select id="joinShape">
+            <option value="straight">Straight</option>
+            <option value="dubins">Curves at the bend (Dubins)</option>
+          </select>
+        </div>
+        <div class="row" id="walkRow" title="how the traced line goes through junctions">
+          <label for="walk">Through junctions</label>
+          <select id="walk">
+            <option value="step">Straightest next step</option>
+            <option value="pairs">Straightest pairing overall</option>
+          </select>
+        </div>
+        <div class="row" title="what happens to a corner too tight for the bend">
+          <label for="bendFix">Tight corners</label>
+          <select id="bendFix">
+            <option value="none">Report them</option>
+            <option value="merge">Merge into one corner</option>
+            <option value="remove">Cut their points out</option>
+            <option value="optimize">Relax the whole line</option>
+          </select>
+        </div>
+        <div class="row" title="how far a fix may move the line off the traced edges">
+          <label for="maxStray">Stray at most</label>
+          <input type="number" id="maxStray" class="len" min="0" step="any">
+          <span class="unit u"></span>
+        </div>
+        <div class="row" title="with a bend, the edges are smoothed so the line can follow them">
+          <label for="bendSmooth">Smoothing</label>
+          <select id="bendSmooth">
+            <option value="uniform">Everywhere, at two radii</option>
+            <option value="tight">Only where tighter than the bend</option>
+          </select>
+        </div>
+        <p class="note">These act only with a smallest bend above 0. The figures show how many corners stay tight and how far the line strays from the edges.</p>
+      </div>
+    </details>
+
+    <details open>
       <summary>The line &amp; output</summary>
       <div class="body">
         <table class="figs" id="figs"></table>

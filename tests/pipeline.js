@@ -45,6 +45,21 @@ export function run() {
   const near = Math.hypot(ps.start.x - startAt.x, ps.start.y - startAt.y);
   const any = Math.min(...ps.graph.nodes.filter((n) => n.deg % 2).map((n) => Math.hypot(n.x - startAt.x, n.y - startAt.y)));
   check('a start point: the line starts at least as near it as the nearest odd node', near <= any + 1e-3, `${num(near, 2)} mm away (nearest odd node of the edges ${num(any, 2)})`);
+  // every bend option: still one continuous line, tangent except at the tight corners it reports
+  const wire = { ...base, minRadius: 3, lineWidth: 1.2 };
+  const variants = [
+    { joinShape: 'dubins' }, { walk: 'pairs' }, { bendSmooth: 'tight' },
+    { bendFix: 'merge' }, { bendFix: 'remove' }, { bendFix: 'optimize' },
+    { joinShape: 'dubins', walk: 'pairs', bendSmooth: 'tight', bendFix: 'merge' },
+  ];
+  const plainW = runPipeline(rings, wire, {});
+  for (const v of variants) {
+    const p = runPipeline(rings, { ...wire, ...v }, {});
+    const c = continuity(p.path, 0.01);
+    check(`rings, wire, ${JSON.stringify(v).replace(/[{}"]/g, '')}: one continuous line, kinks only at reported tight corners`,
+      p.path.segs.length > 10 && c.gap < 1e-3 && c.kinks <= p.tight.length,
+      `${p.tight.length} tight (plain ${plainW.tight.length}), ${num(p.stats.length, 0)} mm (plain ${num(plainW.stats.length, 0)}), stray ${num(p.stats.strayMax, 2)} mm`);
+  }
   const pc = runPipeline(rings, { ...base, closed: true }, {});
   check('closed: ends where it starts', Math.hypot(pc.start.x - pc.end.x, pc.start.y - pc.end.y) < 1e-6, '');
 }

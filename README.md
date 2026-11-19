@@ -33,9 +33,24 @@ or a length of wire can be bent to.
   *Corner loops* on becomes a small loop round a circle of that radius. With a
   bend radius set, the edges are smoothed at two radii, since a line cannot bend
   round a smaller detail.
+- **Keeping to the bend (experiments, with a bend radius above 0):**
+  - *Joins: curves at the bend (Dubins)*: every join becomes the shortest path
+    that leaves a stroke the way it was going and meets the next stroke the way
+    that one goes, never tighter than the bend.
+  - *Through junctions: straightest pairing overall*: at every junction the
+    ways in and out are paired straightest first, and the pieces spliced into one
+    line, instead of choosing the straightest next step as it goes.
+  - *Tight corners*: report them; *merge* a tight corner and its neighbours into
+    one corner that has room; *cut their points out* one by one; or *relax the
+    whole line* toward the bend. Each keeps within *Stray at most* of the traced
+    edges (the arcs too: a bend that would cut a sharp tip off by more is
+    reported as tight instead).
+  - *Smoothing: only where tighter than the bend*, instead of everywhere at two
+    radii.
 - **The line's figures:** length (how much draws the image's edges, goes over a
   line again, or is not in the image), bends, the tightest bend, corners tighter
-  than the smallest bend, loops, crossings.
+  than the smallest bend, loops, how far the line strays from the edges (at
+  most and on average), crossings.
 
 ## Run it
 

@@ -81,6 +81,12 @@ export const DEFAULTS = {
   lineWidth: 0.5,        // mm
   minRadius: 0,          // mm, the tightest bend allowed
   loops: false,          // a corner too sharp to bend becomes a small loop
+  // enforcing the smallest bend (core/bends.js), experiments to compare
+  joinShape: 'straight', // 'straight' | 'dubins': joins as the shortest paths no tighter than the bend
+  walk: 'step',          // euler: 'step' (straightest way on, step by step) | 'pairs' (straightest pairing at every node)
+  bendFix: 'none',       // tight corners: 'none' (reported) | 'merge' | 'remove' | 'optimize'
+  maxStray: 3,           // mm, how far a fix may move the line off the traced edges
+  bendSmooth: 'uniform', // with a bend: 'uniform' (smoothed at two radii) | 'tight' (only where tighter than the bend)
 };
 
 /**

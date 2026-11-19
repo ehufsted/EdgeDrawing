@@ -27,10 +27,13 @@ const NUMS = {
   widthMm: (x) => x > 0, heightMm: (x) => x >= 0, gamma: (x) => x > 0, brightness: (x) => x > 0,
   saturation: (x) => x >= 0, edgeScale: (x) => x > 0, edgeAmount: (x) => x > 0 && x <= 1,
   minFeature: (x) => x >= 0, minLength: (x) => x >= 0, simplify: (x) => x >= 0,
-  lineWidth: (x) => x >= 0, minRadius: (x) => x >= 0,
+  lineWidth: (x) => x >= 0, minRadius: (x) => x >= 0, maxStray: (x) => x >= 0,
 };
 /** The settings that are one of a few words. */
-const ENUMS = { join: ['euler', 'tsp'], oddJoin: ['retrace', 'new', 'shorter'], medium: Object.keys(MEDIA) };
+const ENUMS = {
+  join: ['euler', 'tsp'], oddJoin: ['retrace', 'new', 'shorter'], medium: Object.keys(MEDIA),
+  joinShape: ['straight', 'dubins'], walk: ['step', 'pairs'], bendFix: ['none', 'merge', 'remove', 'optimize'], bendSmooth: ['uniform', 'tight'],
+};
 const BOOLS = ['closed', 'loops'];
 
 export const DISPLAY = { ink: '#1a1a1a', paper: '#ffffff' };

@@ -20,10 +20,13 @@
 
 ## Better lines for wire
 
-- **Direction-aware joins.** Most tight corners in wire mode are at stroke ends
-  where the next run leaves at a sharp angle or turns straight back. Bridges
-  and odd-node pairing should cost the turn they force (no cost straight on,
-  most for a hairpin, scaled by the bend radius), not only their length.
+Tried on branch `curvature` (2026-11-19): Dubins joins, the paired walk, tight-only
+smoothing, merge / remove / optimize; see docs/architecture.md for the numbers.
+
+- **Direction-aware joins.** With Dubins joins, choose bridges, odd-node pairs
+  and the TSP order by Dubins length (the turn they force), not the straight
+  distance: the loops Dubins joins make where strokes face badly are the cost
+  of the best variant now.
 - **U-turns round a peg.** A reversal (a dead end that is retraced, or a hairpin
   join) as a half circle of the smallest radius, the way back offset by two
   radii, instead of a tight corner or a long teardrop loop.

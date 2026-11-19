@@ -10,7 +10,9 @@ shim/      image resize and blur, mulberry32 (copied from PaintByNumbers)
 core/      units (settings, MEDIA), color, raster (the work grid), style (the
            filter chain), edges (Canny + thinning), graph (pixels -> junctions
            and chains, clean-up, gap linking), route (one line: Eulerian or
-           TSP), arcs (straights and arcs, measurements), svg, printout,
+           TSP), arcs (straights and arcs, measurements), bends (keeping to
+           the bend: Dubins joins, merge / remove / optimize, the stray),
+           dubins (shortest paths under a turning radius), svg, printout,
            project; and, copied, kuwahara, steer, features, geom
 pipeline.js  the whole chain, with its stage cache; imports core/ only
 worker.js  wraps pipeline.js and keeps the image and the cache between runs
@@ -50,8 +52,9 @@ An arc is never tighter than the smallest bend radius, except at a corner the
 fitter reports as TIGHT (`plan.tight`, red in Problems). A corner's radius is
 the one whose arc passes within `simplify` of it (so gentle corners left on a
 curve come back smooth, and sharp ones stay corners), at least the smallest
-bend, at most what the two straights beside it have room for (shared in
-proportion between the corners at either end of a straight). With corner loops
+bend, at most what the two straights beside it have room for (each corner
+first gets what the smallest bend needs, the rest shared in
+proportion to what each wants). With corner loops
 on, a tight corner of up to 135° becomes a loop round a circle of the smallest
 radius instead (sharper ones would be teardrops many radii long). With a bend
 radius set, stage B smooths at two radii, since no line can follow a detail
@@ -88,3 +91,36 @@ count as one).
 - In wire mode most tight corners are where a stroke ends and the line turns
   back (a hairpin) or a join leaves it at a sharp angle. Corner loops fix them
   but add about 20 mm of wire each; see docs/TODO.md for the planned fix.
+
+## Keeping to the bend: measured (2026-11-19)
+
+Wire 1.2 mm, bend radius 3 mm, stray at most 3 mm, 300 mm wide. Tight corners
+(of all bends), line length, and the largest stray from the traced edges:
+
+| variant | rhino coarse | rhino medium | Mona Lisa coarse |
+| --- | --- | --- | --- |
+| plain | 114 of 225, 1.78 m, 2.1 mm | 299 of 550, 3.04 m | 365 of 697, 5.20 m |
+| Dubins joins | 75, 2.08 m | 161, 3.86 m | 186, 6.37 m |
+| paired walk | 112 | 294 | 362 |
+| smoothing only where tight | 83 | 238 | 307 |
+| merge | 67 | 178 | 265 |
+| cut points out (remove) | 41 | 71 | 116 |
+| relax the whole line (optimize) | 79 (963 bends) | 160 | 250 |
+| Dubins + pairs + remove | 15, 2.04 m | 17, 3.69 m | 27, 6.16 m |
+| Dubins + pairs + tight-only + remove | **5**, 1.84 m, 2.8 mm | **16**, 3.65 m | **22**, 6.02 m |
+| Dubins + pairs + optimize | 33 | 57 | 73 |
+
+- The tight corners are mostly at joins (Dubins halves them) and at small
+  wiggles the fixes can remove within the stray; what is left are sharp tips
+  and hairpins no 3 mm bend can follow within 3 mm.
+- Dubins joins cost line: a join whose two strokes face badly becomes a loop
+  (the share not in the image goes from 27% to 39% on the rhino). Choosing
+  joins by their Dubins length, not their straight one, should cut that.
+- The paired walk alone changes little: most junctions here have three chains.
+- Optimize converges poorly against the pull back to the traced line, and its
+  line is many short arcs (it cannot be simplified without undoing it).
+- Fixes found on the way, for every option: the arc fitter now gives each corner
+  what the smallest bend needs before sharing the rest of a straight (sharing
+  in proportion, a nearly straight corner starved a sharp neighbour); a tight
+  corner keeps within the tolerance of its point (it used to cut a dead end's
+  tip back by a whole straight); and the stray budget bounds the arcs too.
