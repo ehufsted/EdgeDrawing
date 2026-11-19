@@ -23,7 +23,8 @@ import { generateSample } from './app/samples.js';
 const $ = (id) => document.getElementById(id);
 const STORE = 'edgedrawing.v1';
 
-const LEN_IDS = ['widthMm', 'heightMm', 'edgeScale', 'minFeature', 'minLength', 'simplify', 'lineWidth', 'minRadius', 'maxStray'];
+const LEN_IDS = ['widthMm', 'heightMm', 'edgeScale', 'minFeature', 'minLength', 'simplify', 'lineWidth', 'minRadius', 'maxStray', 'fourierScale', 'pidLook'];
+const GAIN_IDS = ['pidP', 'pidI', 'pidD'];   // the steering's gains: plain numbers
 const BEND_IDS = ['joinShape', 'walk', 'bendFix', 'bendSmooth'];   // the bend experiments' selects
 
 /** The Edges & detail presets, mm (edgeAmount a share). */
@@ -267,6 +268,8 @@ function showJoin() {
   $('oddRow').hidden = state.s.join !== 'euler';
   $('walkRow').hidden = state.s.join !== 'euler';
   for (const id of BEND_IDS) $(id).value = state.s[id];
+  for (const id of GAIN_IDS) $(id).value = state.s[id];
+  showBendRows();
   $('oddJoin').value = state.s.oddJoin;
   $('closed').checked = state.s.closed;
 }
@@ -310,7 +313,18 @@ function bindLine() {
     });
   }
   $('loops').addEventListener('change', () => { state.s.loops = $('loops').checked; scheduleRun(0); });
-  for (const id of BEND_IDS) $(id).addEventListener('change', () => { state.s[id] = $(id).value; scheduleRun(0); });
+  for (const id of BEND_IDS) $(id).addEventListener('change', () => { state.s[id] = $(id).value; showBendRows(); scheduleRun(0); });
+  for (const id of GAIN_IDS) {
+    $(id).addEventListener('input', () => { const v = parseFloat($(id).value); if (v >= 0) { state.s[id] = v; scheduleRun(); } });
+  }
+}
+
+/** Each tight-corner fix's own controls, shown only with it. */
+function showBendRows() {
+  const fix = state.s.bendFix;
+  $('fourierRow').hidden = fix !== 'fourier';
+  $('pidGroup').hidden = fix !== 'pid';
+  $('strayRow').hidden = fix === 'fourier' || fix === 'pid';
 }
 
 // ------------------------------------------------------------------- paint
@@ -587,7 +601,7 @@ function renderFigures() {
     row('not in the image', `${longText(st.join, U)} · ${pct(st.join, st.length)}`, KIND.join),
     row('Bends (arcs)', String(st.bends)),
     row('Tightest bend', st.bends ? `${L(st.minR, U === 'in' ? 3 : 1)} ${unitLabel()} radius` : '—'),
-    row('Tighter than the smallest bend', String(st.tight)),
+    row('Places tighter than the smallest bend', String(st.tight)),
     row('Corner loops', String(st.loops)),
     row('Strays from the edges', `at most ${L(st.strayMax ?? 0, U === 'in' ? 3 : 1)}, on average ${L(st.strayMean ?? 0, U === 'in' ? 3 : 2)} ${unitLabel()}`),
     row('Crossings', String(st.crossings)),

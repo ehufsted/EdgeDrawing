@@ -3,7 +3,7 @@
 
 import { section, check, num, mkRand } from './runner.js';
 import { dubins } from '../src/core/dubins.js';
-import { fitLine, measureStray } from '../src/core/bends.js';
+import { fitLine, measureStray, fft, fourierLine, steerLine } from '../src/core/bends.js';
 import { pairedWalk, hierholzer } from '../src/core/route.js';
 import { smoothTight, smoothLine, circumradius } from '../src/core/graph.js';
 import { continuity } from './core.arcs.js';
@@ -24,7 +24,7 @@ function tightest(p, R) {
 }
 
 export function run() {
-  section('core.bends', 'Prediction: every Dubins path lands on its goal point and heading, is tangent throughout, turns only at the radius, and is never shorter than the straight distance (a goal straight ahead is exactly that); the paired walk draws every edge once, continuously; tight-only smoothing leaves points more than 2R from a tight corner exactly where they were; each fix clears a 2 mm notch in a straight at R = 3 within a 3 mm stray, and none can within 1 mm; Dubins joins leave no corner where a join meets a stroke.');
+  section('core.bends', 'Prediction: every Dubins path lands on its goal point and heading, is tangent throughout, turns only at the radius, and is never shorter than the straight distance (a goal straight ahead is exactly that); the paired walk draws every edge once, continuously; tight-only smoothing leaves points more than 2R from a tight corner exactly where they were; each fix clears a 2 mm notch in a straight at R = 3 within a 3 mm stray, and none can within 1 mm; Dubins joins leave no corner where a join meets a stroke; Fourier smoothing removes wiggles shorter than its length scale and keeps longer ones and the ends; the PID steering never turns tighter than the radius, follows a straight exactly, and loops round at a dead end.');
 
   // Dubins
   const rand = mkRand(7);
@@ -104,6 +104,46 @@ export function run() {
     const g = fitLine([notch], { minRadius: 3, tol: 0.3, fix, maxStray: 1 });
     check(`${fix}: within 1 mm it cannot, and says so`, g.tight.length > 0 && g.stray.max <= 1 + 0.3 + 0.05, `${g.tight.length} tight, stray ${num(g.stray.max, 2)} mm`);
   }
+
+  // the FFT, and Fourier smoothing
+  const N = 64, re = new Float64Array(N), im = new Float64Array(N);
+  const r0 = mkRand(3), orig = Array.from({ length: N }, () => r0());
+  re.set(orig);
+  fft(re, im); fft(re, im, true);
+  check('FFT then inverse gives the signal back', orig.every((v, i) => Math.abs(re[i] - v) < 1e-12 && Math.abs(im[i]) < 1e-12), '');
+  const cre = Float64Array.from({ length: N }, (_, i) => Math.cos((2 * Math.PI * 5 * i) / N)), cim = new Float64Array(N);
+  fft(cre, cim);
+  check('...a cosine of 5 cycles is all in bins 5 and 59', Math.abs(cre[5] - N / 2) < 1e-9 && Math.abs(cre[59] - N / 2) < 1e-9 && Math.abs(cre[6]) < 1e-9, '');
+  // a 200 mm line with a 2 mm wiggle (amplitude 0.5) and a 200 mm bow (amplitude 5)
+  const wav = [];
+  for (let s = 0; s <= 200; s += 0.1) wav.push(s, 0.5 * Math.sin((2 * Math.PI * s) / 2) + 5 * Math.sin((Math.PI * s) / 200));
+  const fw = fourierLine(wav, Array(wav.length / 2 - 1).fill('edge'), 10, 0);
+  const n2 = fw.pts.length / 2;
+  let wig = 0, bow = 0;
+  for (let j = 0; j < n2; j++) {
+    const x = fw.pts[2 * j], y = fw.pts[2 * j + 1];
+    wig = Math.max(wig, Math.abs(y - 5 * Math.sin((Math.PI * x) / 200)));
+    bow = Math.max(bow, y);
+  }
+  check('Fourier, λ = 10 mm: the 2 mm wiggle is gone, the 200 mm bow kept', wig < 0.05 && bow > 4.9 && bow < 5.1, `wiggle left ${num(wig, 3)} mm, bow ${num(bow, 3)} mm`);
+  check('...and the ends do not move', fw.pts[0] === wav[0] && fw.pts[1] === wav[1] && fw.pts[2 * n2 - 2] === wav[wav.length - 2] && fw.pts[2 * n2 - 1] === wav[wav.length - 1], '');
+  const fn = fitLine([notch], { minRadius: 3, tol: 0.3, fix: 'fourier', fourierScale: 15 });
+  const fnc = continuity(fn.path, 1e-3);   // near-straight arcs of huge radius carry ~1e-5 rad of rounding
+  check('Fourier, λ = 15 mm: the notch is no longer tight, one tangent line', fn.tight.length === 0 && fnc.gap < 1e-6 && fnc.kinks === 0, `${fn.tight.length} tight, stray ${num(fn.stray.max, 2)} mm, ${fnc.kinks} kinks, worst ${fnc.kink.toExponential(1)}`);
+
+  // PID steering
+  const radii = (path) => path.segs.filter((s) => s.k === 'A').map((s) => s.r);
+  const sp = steerLine([0, 0, 60, 0], ['edge'], 3, {});
+  const spEnd = sp.path.segs[sp.path.segs.length - 1];
+  check('PID on a straight: a straight, ending at its end', sp.path.segs.every((s) => s.k === 'L') && Math.abs(spEnd.x - 60) < 0.5 && Math.abs(spEnd.y) < 1e-9, `${sp.path.segs.length} segs, ends at ${num(spEnd.x, 2)}, ${num(spEnd.y, 3)}`);
+  const pn = fitLine([notch], { minRadius: 3, tol: 0.3, fix: 'pid', pid: { look: 6 } });
+  const pnc = continuity(pn.path, 1e-6);
+  check('PID over the notch: no arc tighter than 3 mm, tangent throughout, nothing tight', radii(pn.path).every((r) => r >= 3 - 1e-9) && pnc.kinks === 0 && pn.tight.length === 0,
+    `tightest ${num(Math.min(...radii(pn.path)), 2)} mm, stray ${num(pn.stray.max, 2)} mm`);
+  // a dead end: 40 mm out and straight back
+  const hp = steerLine([0, 0, 40, 0, 0, 0.001], ['edge', 'retrace'], 3, { look: 6 });
+  const hpEnd = hp.path.segs[hp.path.segs.length - 1];
+  check('PID at a dead end: loops round at the radius and comes back to the end', radii(hp.path).every((r) => r >= 3 - 1e-9) && Math.hypot(hpEnd.x, hpEnd.y) < 1, `ends ${num(Math.hypot(hpEnd.x, hpEnd.y), 2)} mm from the end, ${hp.steps} steps`);
 
   // Dubins joins: a stroke, a 2 mm sideways join (two 3 mm fillets need 6), a stroke back
   const runs = [{ pts: [0, 0, 20, 0], kind: 'edge' }, { pts: [20, 0, 20, 2], kind: 'join' }, { pts: [20, 2, 0, 2], kind: 'edge' }];

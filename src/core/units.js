@@ -84,8 +84,11 @@ export const DEFAULTS = {
   // enforcing the smallest bend (core/bends.js), experiments to compare
   joinShape: 'straight', // 'straight' | 'dubins': joins as the shortest paths no tighter than the bend
   walk: 'step',          // euler: 'step' (straightest way on, step by step) | 'pairs' (straightest pairing at every node)
-  bendFix: 'none',       // tight corners: 'none' (reported) | 'merge' | 'remove' | 'optimize'
-  maxStray: 3,           // mm, how far a fix may move the line off the traced edges
+  bendFix: 'none',       // tight corners: 'none' (reported) | 'merge' | 'remove' | 'optimize' | 'fourier' | 'pid'
+  maxStray: 3,           // mm, how far a fix may move the line off the traced edges (not fourier or pid)
+  fourierScale: 12,      // mm, fourier: wiggles shorter than this are smoothed out (half of one this long kept)
+  pidLook: 6,            // mm, pid: how far ahead on the traced line the steering aims
+  pidP: 2, pidI: 0, pidD: 0.5,   // pid: the gains (P = 2 is pure pursuit)
   bendSmooth: 'uniform', // with a bend: 'uniform' (smoothed at two radii) | 'tight' (only where tighter than the bend)
 };
 

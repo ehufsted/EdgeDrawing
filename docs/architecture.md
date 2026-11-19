@@ -124,3 +124,27 @@ Wire 1.2 mm, bend radius 3 mm, stray at most 3 mm, 300 mm wide. Tight corners
   in proportion, a nearly straight corner starved a sharp neighbour); a tight
   corner keeps within the tolerance of its point (it used to cut a dead end's
   tip back by a whole straight); and the stray budget bounds the arcs too.
+
+### Fourier smoothing and PID steering (added the same day)
+
+Tight PLACES now (tight corners within one bend radius of a tighter one count
+once, so a densely sampled line is not counted per vertex). Same settings.
+
+| variant | rhino coarse | rhino medium | Mona Lisa coarse | largest / mean stray |
+| --- | --- | --- | --- | --- |
+| plain | 67 | 137 | 199 | 0.6–2.8 / 0.1 mm |
+| Fourier, length scale 8 / 15 / 30 mm | 54 / 36 / 20 | 101 / 71 / 47 | 170 / 114 / 77 | 1.3 / 2.3 / 4.5, mean 0.2 / 0.5 / 1.2 mm |
+| PID, look ahead 4 / 8 / 15 mm | 0 | 0 | 0 | 5–8 / 9–10 / 11–12, mean 0.6 / 1.5 / 2.7 mm |
+| Dubins + pairs + tight-only + remove | 5 | 15 | 21 | 2.8–3.3 / 0.2–0.3 mm |
+| Dubins + pairs + tight-only + PID 8 | 0 | 0 | 0 | 4.7–8.5 / 0.6–0.75 mm |
+
+- PID is the only method that can never leave a tight corner: the curvature is
+  capped, so the bend holds by construction and the cost moves entirely into
+  stray (largest where the traced line turns sharper than the car can: tips,
+  hairpins). A short look ahead follows closest. I and D change little here.
+- Fourier trades tight places for stray smoothly with its length scale, but
+  guarantees neither.
+- Both give dense lines (thousands of short arcs): for a bend table they need
+  merging into fewer arcs of nearly equal curvature (a TODO).
+- Where a steered stroke stops just short of its end, the Dubins join to the
+  next stroke makes a small S-bend at the radius.

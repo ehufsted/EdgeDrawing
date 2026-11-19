@@ -44,7 +44,11 @@ or a length of wire can be bent to.
     one corner that has room; *cut their points out* one by one; or *relax the
     whole line* toward the bend. Each keeps within *Stray at most* of the traced
     edges (the arcs too: a bend that would cut a sharp tip off by more is
-    reported as tight instead).
+    reported as tight instead). Two more, controlled by their own settings
+    instead of the stray: *Fourier smoothing* takes out wiggles shorter than a
+    *Length scale*; *Steer it (PID)* drives the line along at constant speed,
+    turning no tighter than the bend, aiming a *Look ahead* distance along the
+    traced line with P, I and D gains: never tight, only stray.
   - *Smoothing: only where tighter than the bend*, instead of everywhere at two
     radii.
 - **The line's figures:** length (how much draws the image's edges, goes over a

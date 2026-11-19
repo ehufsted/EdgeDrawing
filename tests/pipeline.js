@@ -49,7 +49,7 @@ export function run() {
   const wire = { ...base, minRadius: 3, lineWidth: 1.2 };
   const variants = [
     { joinShape: 'dubins' }, { walk: 'pairs' }, { bendSmooth: 'tight' },
-    { bendFix: 'merge' }, { bendFix: 'remove' }, { bendFix: 'optimize' },
+    { bendFix: 'merge' }, { bendFix: 'remove' }, { bendFix: 'optimize' }, { bendFix: 'fourier' }, { bendFix: 'pid' },
     { joinShape: 'dubins', walk: 'pairs', bendSmooth: 'tight', bendFix: 'merge' },
   ];
   const plainW = runPipeline(rings, wire, {});

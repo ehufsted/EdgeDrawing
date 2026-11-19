@@ -30,6 +30,11 @@ smoothing, merge / remove / optimize; see docs/architecture.md for the numbers.
 - **U-turns round a peg.** A reversal (a dead end that is retraced, or a hairpin
   join) as a half circle of the smallest radius, the way back offset by two
   radii, instead of a tight corner or a long teardrop loop.
+- **Fewer arcs from Fourier, optimize and PID.** Their lines are thousands of short
+  arcs; merge runs of nearly equal curvature (within a tolerance) into one arc,
+  for a bend table a person can follow.
+- **PID end of stroke.** Steer onto the exact end point and heading of each stroke
+  (or hand over to the Dubins join earlier), so no small S-bend is left there.
 - **Side-by-side retraces.** A retraced run offset by the wire's thickness from
   the run it repeats, so the template shows both wires.
 

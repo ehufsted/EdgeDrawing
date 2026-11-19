@@ -27,6 +27,12 @@
 //               where it was traced, never past the stray, and this repeated (a
 //               projected smoothing, as in position-based dynamics). Its line is
 //               many short arcs: simplified, the uneven spacing undid it
+//   'fourier'   low-passed in the frequency domain: wiggles shorter than a length
+//               scale L are taken out (fourierLine). Not held to the stray, nor
+//               to the bend: L is the control
+//   'pid'       STEERED at constant speed, the curvature capped at 1/R, aiming
+//               ahead on the traced line through a PID controller (steerLine):
+//               never tight by construction, only stray
 //
 // THE STRAY BUDGET HOLDS FOR THE ARCS TOO (fitArcs' maxDev): the smallest bend in
 // a sharp V sits far back from the tip (3 mm in a 15° V cuts 20 mm off it), so
@@ -43,7 +49,8 @@ const OPT_ITER = 400;
 
 /**
  * @param {[{pts, kind}]} runs  core/route.js
- * @param {{minRadius, tol, loops, joins?:'straight'|'dubins', fix?:'none'|'merge'|'remove'|'optimize', maxStray?:number}} o
+ * @param {{minRadius, tol, loops, joins?:'straight'|'dubins', fix?:'none'|'merge'|'remove'|'optimize'|'fourier'|'pid', maxStray?:number,
+ *          fourierScale?:number, pid?:{look:number, p:number, i:number, d:number}}} o
  * @returns {{path, tight, loops, stray:{max, mean}}}
  */
 export function fitLine(runs, o) {
@@ -54,10 +61,16 @@ export function fitLine(runs, o) {
   if (m < 2) return { path: { x0: pts[0] || 0, y0: pts[1] || 0, segs: [] }, tight: [], loops: 0, stray: { max: 0, mean: 0 } };
   const dub = o.joins === 'dubins' && minR > 0;
   const pieces = dub ? splitAtJoins(pts, kinds) : [{ pts, kinds }];
-  const fit = { tight: [], loops: 0 };
+  const fit = { tight: [], loops: 0, steps: 0 };
   const fitted = pieces.map((p) => {
     let { pts: pp, kinds: kk } = p;
     if (pp.length < 4) return { path: { x0: pp[0], y0: pp[1], segs: [] }, h0: null, h1: null };
+    if (o.fix === 'pid') {
+      const sim = steerLine(pp, kk, minR, o.pid || {});
+      fit.steps += sim.steps;
+      return sim;
+    }
+    if (o.fix === 'fourier') ({ pts: pp, kinds: kk } = fourierLine(pp, kk, o.fourierScale || 10, minR));
     if (minR > 0 && o.fix === 'optimize') ({ pts: pp, kinds: kk } = optimizeLine(pp, kk, minR, maxStray, o.tol));
     // the stray budget holds for the arcs too: a bend that would cut a sharp V's tip
     // off by more than it is a tight corner, not a silent loss of the tip
@@ -93,7 +106,20 @@ export function fitLine(runs, o) {
     }
     path.segs.push(...f.path.segs);
   });
-  return { path, tight: fit.tight, loops: fit.loops, stray: measureStray(pts, kinds, path) };
+  return { path, tight: tightPlaces(fit.tight, minR), loops: fit.loops, stray: measureStray(pts, kinds, path) };
+}
+
+/**
+ * Tight corners counted by PLACE: those within one bend radius of a tighter one
+ * are the same place (a densely sampled line, from Fourier or optimize, has a
+ * run of tight vertices where a sparse one has one corner). The tightest is kept.
+ */
+export function tightPlaces(tight, R) {
+  const out = [];
+  for (const t of [...tight].sort((a, b) => a.r - b.r || a.x - b.x || a.y - b.y)) {
+    if (!out.some((q) => Math.hypot(q.x - t.x, q.y - t.y) < Math.max(R, 1e-6))) out.push(t);
+  }
+  return out;
 }
 
 const endOf = (path) => (path.segs.length ? path.segs[path.segs.length - 1] : { x: path.x0, y: path.y0 });
@@ -329,4 +355,168 @@ export function measureStray(pts, kinds, path) {
     }
   }
   return { max, mean: count ? sum / count : 0, at };
+}
+
+/**
+ * A polyline resampled at n points evenly spaced along it: {x, y, kinds, L}
+ * (kinds per new segment: the original segment under its middle).
+ */
+function resample(pts, kinds, n) {
+  const m = pts.length / 2;
+  const cum = [0];
+  for (let i = 1; i < m; i++) cum.push(cum[i - 1] + Math.hypot(pts[2 * i] - pts[2 * i - 2], pts[2 * i + 1] - pts[2 * i - 1]));
+  const L = cum[m - 1];
+  const x = new Float64Array(n), y = new Float64Array(n), K = [];
+  for (let j = 0, seg = 0; j < n; j++) {
+    const s = (L * j) / (n - 1);
+    while (seg < m - 2 && cum[seg + 1] < s) seg++;
+    const f = cum[seg + 1] > cum[seg] ? Math.min(1, (s - cum[seg]) / (cum[seg + 1] - cum[seg])) : 0;
+    x[j] = pts[2 * seg] + f * (pts[2 * seg + 2] - pts[2 * seg]);
+    y[j] = pts[2 * seg + 1] + f * (pts[2 * seg + 3] - pts[2 * seg + 1]);
+  }
+  for (let j = 1, seg = 0; j < n; j++) {
+    const s = (L * (j - 0.5)) / (n - 1);
+    while (seg < m - 2 && cum[seg + 1] < s) seg++;
+    K.push(kinds[seg]);
+  }
+  return { x, y, kinds: K, L };
+}
+
+/** In-place iterative radix-2 FFT of (re, im), length a power of 2; inverse when inv. */
+export function fft(re, im, inv = false) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = ((inv ? 2 : -2) * Math.PI) / len, wr = Math.cos(ang), wi = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let cr = 1, ci = 0;
+      for (let k = 0; k < len / 2; k++) {
+        const a = i + k, b = a + len / 2;
+        const tr = re[b] * cr - im[b] * ci, ti = re[b] * ci + im[b] * cr;
+        re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti;
+        const nr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = nr;
+      }
+    }
+  }
+  if (inv) for (let i = 0; i < n; i++) { re[i] /= n; im[i] /= n; }
+}
+
+/**
+ * 'fourier': the line low-passed in the frequency domain, wiggles shorter than
+ * the LENGTH SCALE λ taken out. The line is resampled evenly, its straight
+ * end-to-end trend subtracted (so both ends sit at 0), and the rest reflected
+ * oddly about its ends into one period of a sine series, so the transform sees
+ * no jump at the seam and the ends do not move. Each frequency f (cycles per
+ * mm) is kept by exp(−ln2·(fλ)²): half of a wiggle λ long survives, a shorter
+ * one much less (a smooth roll-off, so no ringing next to sharp corners). The
+ * x and y signals go through one complex transform, x + iy. Not held to the
+ * stray: λ is the control. Not simplified after, for the reason optimize is not.
+ */
+export function fourierLine(pts, kinds, lambda, R) {
+  const m = pts.length / 2;
+  let L = 0;
+  for (let i = 1; i < m; i++) L += Math.hypot(pts[2 * i] - pts[2 * i - 2], pts[2 * i + 1] - pts[2 * i - 1]);
+  const want = Math.max(0.2, Math.min(lambda / 8, R > 0 ? R / 3 : 1));
+  // n points, an odd reflection of period M = 2(n − 1), a power of 2
+  let M = 4;
+  while (M / 2 + 1 < L / want + 1 && M < 1 << 20) M <<= 1;
+  const n = M / 2 + 1;
+  if (L < 1e-6) return { pts, kinds };
+  const r = resample(pts, kinds, n);
+  const re = new Float64Array(M), im = new Float64Array(M);
+  const tx = (j) => r.x[0] + ((r.x[n - 1] - r.x[0]) * j) / (n - 1), ty = (j) => r.y[0] + ((r.y[n - 1] - r.y[0]) * j) / (n - 1);
+  for (let j = 0; j < n; j++) { re[j] = r.x[j] - tx(j); im[j] = r.y[j] - ty(j); }
+  for (let j = 1; j < n - 1; j++) { re[M - j] = -re[j]; im[M - j] = -im[j]; }
+  fft(re, im);
+  const ds = L / (n - 1);
+  for (let k = 0; k < M; k++) {
+    const f = Math.min(k, M - k) / (M * ds);
+    const h = Math.exp(-Math.LN2 * (f * lambda) ** 2);
+    re[k] *= h; im[k] *= h;
+  }
+  fft(re, im, true);
+  const out = [];
+  for (let j = 0; j < n; j++) out.push(re[j] + tx(j), im[j] + ty(j));
+  out[0] = pts[0]; out[1] = pts[1]; out[2 * n - 2] = pts[2 * m - 2]; out[2 * n - 1] = pts[2 * m - 1];
+  return { pts: out, kinds: r.kinds };
+}
+
+/**
+ * 'pid': the line STEERED, as a vehicle driving at constant speed. Its state
+ * is a position and a heading; each step of ds it turns at a curvature κ
+ * (angular speed per unit length) and moves on, so each step is an arc of
+ * radius 1/|κ| and the path is tangent everywhere by construction. κ is
+ * capped at 1/R, so no bend is tighter than R: there are no tight corners, only
+ * stray. The controller aims at a point LOOK mm ahead on the traced line (from
+ * its progress along it, which only moves forward, inside a window, so a
+ * retraced run is not mistaken for the run beside it):
+ *
+ *   e  = the heading error to that point (radians)
+ *   κ  = (P·e + I·∫e ds / look + D·look·de/ds) / look,   capped at ±1/R
+ *
+ * P = 2 is pure pursuit's geometry (the arc through the target point); I
+ * removes a steady offset on long curves (held to ±look, against wind-up); D
+ * damps the swing out of a turn. At a dead end the car cannot turn round on the
+ * spot, so it loops at the radius and picks the line up again. It stops at the
+ * end of the line (or once past it, getting no nearer).
+ * @returns {{path, h0, h1, steps}}
+ */
+export function steerLine(pts, kinds, R, g) {
+  const look = Math.max(0.5, g.look ?? 6), P = g.p ?? 2, I = g.i ?? 0, D = g.d ?? 0.5;
+  const kMax = R > 0 ? 1 / R : Infinity;
+  const ds = Math.max(0.1, Math.min(R > 0 ? R / 4 : 0.5, look / 8, 0.5));
+  let L = 0;
+  for (let i = 2; i < pts.length; i += 2) L += Math.hypot(pts[i] - pts[i - 2], pts[i + 1] - pts[i - 1]);
+  const n = Math.max(2, Math.ceil(L / (ds / 2)) + 1);   // the reference, twice as fine as the steps
+  const ref = resample(pts, kinds, n);
+  const dr = L / (n - 1);
+  const ahead = Math.max(1, Math.round(look / dr));
+  const win = Math.max(ahead * 2, Math.round((look + 4 * (R || 1) + 5) / dr));
+  let x = ref.x[0], y = ref.y[0];
+  let h = Math.atan2(ref.y[1] - ref.y[0], ref.x[1] - ref.x[0]);
+  const h0 = h;
+  const segs = [];
+  let prog = 0, integ = 0, ePrev = null, lastD = Infinity, steps = 0, kPrev = NaN;
+  const maxSteps = Math.ceil((3 * L) / ds) + 4000;
+  const wrap = (a) => a - 2 * Math.PI * Math.round(a / (2 * Math.PI));
+  for (; steps < maxSteps; steps++) {
+    // progress: the nearest reference point within the window ahead
+    let best = prog, bd = Infinity;
+    for (let j = prog; j <= Math.min(n - 1, prog + win); j++) {
+      const d = (ref.x[j] - x) ** 2 + (ref.y[j] - y) ** 2;
+      if (d < bd) { bd = d; best = j; }
+    }
+    prog = best;
+    const dEnd = Math.hypot(ref.x[n - 1] - x, ref.y[n - 1] - y);
+    if (prog >= n - 1 - ahead && (dEnd < ds || dEnd > lastD)) break;
+    lastD = prog >= n - 1 - ahead ? dEnd : Infinity;
+    const t = Math.min(n - 1, prog + ahead);
+    const e = wrap(Math.atan2(ref.y[t] - y, ref.x[t] - x) - h);
+    integ = Math.max(-look, Math.min(look, integ + e * ds));
+    const de = ePrev === null ? 0 : wrap(e - ePrev) / ds;
+    ePrev = e;
+    let k = (P * e + (I * integ) / look + D * look * de) / look;
+    k = Math.max(-kMax, Math.min(kMax, k));
+    const kind = ref.kinds[Math.min(ref.kinds.length - 1, prog)] || 'edge';
+    // one step: a straight, or an arc of radius 1/|k| (merged into the last when the same)
+    const last = segs[segs.length - 1];
+    if (Math.abs(k) < 1e-9) {
+      x += ds * Math.cos(h); y += ds * Math.sin(h);
+      if (last && last.k === 'L' && kPrev === 0 && last.kind === kind) { last.x = x; last.y = y; } else segs.push({ k: 'L', x, y, kind });
+      kPrev = 0;
+    } else {
+      const cx = x - Math.sin(h) / k, cy = y + Math.cos(h) / k, r = 1 / Math.abs(k);
+      const a0 = Math.atan2(y - cy, x - cx), sweep = k * ds;
+      x = cx + r * Math.cos(a0 + sweep); y = cy + r * Math.sin(a0 + sweep);
+      h += sweep;
+      if (last && last.k === 'A' && k === kPrev && last.kind === kind) { last.sweep += sweep; last.x = x; last.y = y; } else segs.push({ k: 'A', x, y, cx, cy, r, a0, sweep, kind });
+      kPrev = k;
+    }
+  }
+  return { path: { x0: ref.x[0], y0: ref.y[0], segs }, h0, h1: h, steps };
 }
