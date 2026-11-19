@@ -1,0 +1,49 @@
+// core/svg.js, core/printout.js, core/project.js: what leaves the app.
+
+import { section, check } from './runner.js';
+import { pathD, drawingSVG, arrowAt } from '../src/core/svg.js';
+import { fitArcs } from '../src/core/arcs.js';
+import { planHTML, pageWindows, printable, PAPERS } from '../src/core/printout.js';
+import { projectJSON, parseProject } from '../src/core/project.js';
+import { DEFAULTS } from '../src/core/units.js';
+import { defaultStyle } from '../src/core/style.js';
+
+export function run() {
+  section('core.output', 'Prediction: the drawing is one &lt;path&gt; with one M, sized in mm with a matching viewBox; an arc of more than half a turn is written as two A commands; filtering by kind starts a new M at each break; the printout has a page each for figures and fit plus the 1:1 template pages; a project round-trips, and bad values fall back with reasons.');
+  // a right-angle corner on 4.2 mm straights cannot take a 6 mm radius: it becomes a loop
+  const loop = fitArcs([0, 0, 3, 3, 6, 0], ['edge', 'join'], { minRadius: 6, tol: 0.3, loops: true });
+  const d = pathD(loop.path);
+  check('one M', (d.match(/M/g) || []).length === 1, d.slice(0, 60));
+  const big = loop.path.segs.filter((s) => s.k === 'A' && Math.abs(s.sweep) > Math.PI).length;
+  check('a 270° loop is written as two arcs', big === 1 && (d.match(/A/g) || []).length === 2, `${(d.match(/A/g) || []).length} A commands`);
+  const plan = { piece: { W: 30, H: 20 }, path: loop.path };
+  const svg = drawingSVG(plan, { lineWidth: 0.5, title: 'test' });
+  check('true size: 30mm × 20mm, viewBox 0 0 30 20', /width="30mm"/.test(svg) && /height="20mm"/.test(svg) && /viewBox="0 0 30 20"/.test(svg), '');
+  check('one &lt;path&gt;, stroked at the line width', (svg.match(/<path /g) || []).length === 1 && /stroke-width="0.5"/.test(svg), '');
+  const joins = pathD(loop.path, (s) => s.kind === 'join');
+  check('only the joins: one M and the one straight after the loop', (joins.match(/M/g) || []).length === 1 && (joins.match(/L/g) || []).length === 1 && !joins.includes('A'), joins);
+  const a = arrowAt(loop.path, 1);
+  check('arrowAt: 1 mm along the first straight, heading along it', a && Math.abs(a.x - Math.SQRT1_2) < 1e-9 && Math.abs(a.ux - Math.SQRT1_2) < 1e-9, a ? `${a.x}, ${a.ux}` : 'none');
+
+  // the printout: one page each for figures and fit, and the template split onto pages
+  const bigPlan = { ...plan, piece: { W: 400, H: 300 }, start: { x: 0, y: 0 }, end: { x: 6, y: 0 }, notes: ['a note'],
+    stats: { length: 20, edge: 15, retrace: 0, join: 5, bends: 1, minR: 6, tight: 0, crossings: 0 } };
+  const pw = pageWindows(400, 300, printable(PAPERS.letter).w, printable(PAPERS.letter).h);
+  const html = planHTML(bigPlan, { paper: 'letter', fit: true });
+  const pages = (html.match(/<section class="page">/g) || []).length;
+  check('printout: figures + fit + the 1:1 template pages', pages === 2 + pw.windows.length, `${pages} pages, template ${pw.rows} × ${pw.cols}`);
+  check('...the line written once, shown through &lt;use&gt;', (html.match(/id="edl-line"/g) || []).length === 1 && (html.match(/href="#edl-line"/g) || []).length === pages - 1, '');
+
+  // a project round trip, and bad input mended with reasons
+  const s = { ...DEFAULTS, widthMm: 250, join: 'tsp', oddJoin: 'new', start: { x: 10, y: 20 }, closed: true, medium: 'wire', loops: true, style: defaultStyle() };
+  const back = parseProject(projectJSON({ image: { kind: 'sample', name: 'rings' }, units: 'in', settings: s, display: { ink: '#123456', paper: '#ffffff' } }));
+  const same = ['widthMm', 'join', 'oddJoin', 'closed', 'medium', 'loops'].every((k) => back.project.settings[k] === s[k]) &&
+    back.project.settings.start.x === 10 && back.project.units === 'in' && back.project.display.ink === '#123456';
+  check('project: settings, start, units and colours survive a round trip', same && back.problems.length === 0, back.problems.join('; '));
+  const bad = parseProject({ app: 'EdgeDrawing', version: 1, settings: { widthMm: -3, join: 'zigzag', minRadius: 'x' } });
+  check('project: unusable values fall back to defaults, each with a reason', bad.project.settings.widthMm === DEFAULTS.widthMm && bad.project.settings.join === DEFAULTS.join && bad.problems.length >= 3,
+    bad.problems.join('; '));
+  let refused = false;
+  try { parseProject({ app: 'PaintByNumbers', version: 1 }); } catch { refused = true; }
+  check('project: another app\'s file is refused', refused, '');
+}

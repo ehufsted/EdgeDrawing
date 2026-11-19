@@ -1,0 +1,50 @@
+// The whole pipeline on the procedural samples: one continuous line, G1, the
+// edges drawn once, the stages cached, the same result every time.
+
+import { section, check, num } from './runner.js';
+import { runPipeline } from '../src/pipeline.js';
+import { generateSample } from '../src/app/samples.js';
+import { continuity } from './core.arcs.js';
+import { pathStats } from '../src/core/arcs.js';
+import { polyLength } from '../src/core/graph.js';
+
+export function run() {
+  section('pipeline', 'Prediction: on the sphere and rings samples the plan is one line, touching and tangent from end to end (G1), its arcs no tighter than the smallest radius except the corners it reports; the Eulerian line draws the edges once (its "edge" length within 3% of the graph\'s, arcs only cut corners); the same settings give the same plan; turning on corner loops re-uses the cached edges and route.');
+  const base = { widthMm: 200, precision: 'rough', minRadius: 2 };
+  const sphere = generateSample('sphere').color;
+  const cache = {};
+  const p1 = runPipeline(sphere, base, { cache, imageKey: 1 });
+  const c1 = continuity(p1.path);
+  check('sphere: a line was drawn', p1.path.segs.length > 10 && p1.stats.length > 100, `${p1.path.segs.length} segments, ${num(p1.stats.length, 0)} mm`);
+  check('sphere: one continuous line, G1', c1.gap < 1e-3 && c1.kink < 1e-3, `gap ${c1.gap.toExponential(1)} mm, kink ${c1.kink.toExponential(1)} rad`);
+  const arcs = p1.path.segs.filter((s) => s.k === 'A');
+  const under = arcs.filter((a) => a.r < 2 - 1e-3).length;
+  check('sphere: arcs under the 2 mm radius only at reported tight corners', under <= p1.tight.length, `${under} arcs under, ${p1.tight.length} reported`);
+  const graphLen = p1.graph.edges.reduce((s, e) => s + polyLength(e), 0);
+  check('sphere: the edges drawn once (edge length within 3% of the graph\'s)', Math.abs(p1.stats.edge - graphLen) / graphLen < 0.03, `${num(p1.stats.edge, 1)} of ${num(graphLen, 1)} mm`);
+  check('sphere: stats match the path', Math.abs(pathStats(p1.path).length - p1.stats.length) < 0.05, '');
+  const keyB = cache.B.val;
+  const keyC = cache.C.val;
+  const p2 = runPipeline(sphere, { ...base, loops: true }, { cache, imageKey: 1 });
+  check('corner loops re-use the cached edge graph and route', cache.B.val === keyB && cache.C.val === keyC && p2.stats.length > 0, '');
+  const p3 = runPipeline(sphere, base, {});
+  check('the same settings, no cache: the same plan', JSON.stringify(p3) === JSON.stringify(p1), `${JSON.stringify(p3).length} vs ${JSON.stringify(p1).length} chars`);
+
+  // a pen may turn on the spot: with no smallest radius, a kink is allowed only at a corner it could not round
+  const rings = generateSample('rings').color;
+  for (const join of ['euler', 'tsp']) {
+    const p = runPipeline(rings, { ...base, join, minRadius: 0.5 }, {});
+    const c = continuity(p.path, 0.01);
+    check(`rings, ${join}: one continuous line, kinks only at reported tight corners`, p.path.segs.length > 10 && c.gap < 1e-3 && c.kinks <= p.tight.length,
+      `${p.stats.chains} chains, ${num(p.stats.length, 0)} mm, gap ${c.gap.toExponential(1)}, ${c.kinks} kinks, ${p.tight.length} tight`);
+    if (join === 'tsp') check('rings, tsp: nothing retraced', p.stats.retrace === 0, `${num(p.stats.retrace, 1)} mm`);
+  }
+  // the start: an odd node of the joined graph, which can be a bridge's end, so at least as near as the graph's
+  const startAt = { x: 150, y: 150 };
+  const ps = runPipeline(rings, { ...base, start: startAt }, {});
+  const near = Math.hypot(ps.start.x - startAt.x, ps.start.y - startAt.y);
+  const any = Math.min(...ps.graph.nodes.filter((n) => n.deg % 2).map((n) => Math.hypot(n.x - startAt.x, n.y - startAt.y)));
+  check('a start point: the line starts at least as near it as the nearest odd node', near <= any + 1e-3, `${num(near, 2)} mm away (nearest odd node of the edges ${num(any, 2)})`);
+  const pc = runPipeline(rings, { ...base, closed: true }, {});
+  check('closed: ends where it starts', Math.hypot(pc.start.x - pc.end.x, pc.start.y - pc.end.y) < 1e-6, '');
+}

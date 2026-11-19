@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EdgeDrawing</title>
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<style>
+  :root {
+    --bg: #404040; --panel: #303030; --line: #ababff; --text: #e6e7ea;
+    --dim: #ffffff; --accent: #ababff; --warn: #e39820; --bad: #e06c75;
+    --pad: 12px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  header {
+    padding: 8px 14px; border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 12px; flex: 0 0 auto;
+  }
+  header h1 { font-size: 14px; margin: 0; font-weight: 600; letter-spacing: .01em; }
+  header .sub { color: var(--dim); font-size: 12px; }
+  header .hspacer { flex: 1 1 auto; }
+  main { flex: 1 1 auto; display: flex; min-height: 0; }
+
+  aside {
+    width: 380px; flex: 0 0 380px; border-right: 1px solid var(--line);
+    overflow-y: auto; padding: var(--pad); background: var(--panel);
+  }
+  details {
+    border: 1px solid var(--line); border-radius: 6px;
+    margin: 0 0 12px; overflow: hidden;
+  }
+  details > summary {
+    color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: .07em;
+    cursor: pointer; list-style: none; display: flex; align-items: center; gap: 6px;
+    padding: 8px 10px;
+  }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary:hover { background: #ffffff10; }
+  details > summary::after { content: '▸'; margin-left: auto; transition: transform .15s; }
+  details[open] > summary::after { transform: rotate(90deg); }
+  details > .body { padding: 0 10px 10px; }
+
+  .row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+  .row label { flex: 0 0 120px; color: var(--dim); }
+  .row input[type=range] { flex: 1 1 auto; min-width: 0; }
+  .row .val { flex: 0 0 62px; text-align: right; font-variant-numeric: tabular-nums; }
+  .row .unit { color: var(--dim); font-size: 12px; }
+  .row[hidden], .group[hidden] { display: none; }
+  input[type=number], input[type=text], select {
+    background: #12131a; color: var(--text); border: 1px solid var(--line);
+    border-radius: 4px; padding: 3px 6px; font: inherit; width: 100%;
+  }
+  input[type=number] { width: 80px; }
+  input[type=color] {
+    width: 44px; height: 26px; padding: 0 2px; border: 1px solid var(--line);
+    border-radius: 4px; background: #12131a; cursor: pointer;
+  }
+  button {
+    background: #262933; color: var(--text); border: 1px solid var(--line);
+    border-radius: 5px; padding: 6px 10px; font: inherit; cursor: pointer;
+  }
+  button:hover { background: #30343f; }
+  button:disabled { opacity: .4; cursor: default; }
+  button.primary { background: var(--accent); color: #10131a; border-color: var(--accent); font-weight: 600; }
+  button.primary:hover { filter: brightness(1.08); }
+  button.mini { padding: 2px 7px; font-size: 12px; }
+  button.picking { background: var(--warn); color: #10131a; border-color: var(--warn); }
+  .buttons { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
+
+  #drop {
+    border: 1px dashed var(--line); border-radius: 6px; padding: 14px;
+    text-align: center; color: var(--dim); cursor: pointer;
+  }
+  #drop.over { border-color: var(--accent); color: var(--accent); }
+  .samples { display: flex; gap: 6px; margin-top: 8px; }
+  .samples button { flex: 1 1 0; padding: 4px; font-size: 12px; }
+
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; padding: 4px 10px; }
+  .seg.wide { flex: 1 1 auto; }
+  .seg.wide button { flex: 1 1 0; padding: 4px 6px; }
+  .seg button[aria-pressed=true] { background: var(--accent); color: #10131a; font-weight: 600; }
+  label.check { color: var(--dim); display: flex; align-items: center; gap: 5px; cursor: pointer; margin: 6px 0; }
+  label.check[hidden] { display: none; }
+
+  /* the Style chain: one card per filter */
+  .fcard { border: 1px solid #ffffff22; border-radius: 5px; padding: 4px 8px; margin: 6px 0; }
+  .fcard.on { border-color: var(--line); }
+  .fcard .fhead { display: flex; align-items: center; gap: 6px; }
+  .fcard .fhead label.check { flex: 1 1 auto; margin: 2px 0; color: var(--text); }
+  .fcard .fbody[hidden] { display: none; }
+
+  /* the line's figures */
+  table.figs { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  table.figs td { padding: 2px 3px; border-top: 1px solid #ffffff14; }
+  table.figs td:last-child { text-align: right; }
+  .legend i { display: inline-block; width: 16px; height: 3px; vertical-align: middle; margin: 0 3px 0 8px; border-radius: 2px; }
+
+  section.preview {
+    flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; min-height: 0;
+  }
+  .viewbar {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    padding: 6px 10px; border-bottom: 1px solid var(--line); flex: 0 0 auto;
+  }
+  .viewbar .spacer { flex: 1 1 auto; }
+  .viewbar select { width: auto; }
+  .anim { display: flex; align-items: center; gap: 6px; }
+  .anim input[type=range] { width: 140px; }
+  .stage {
+    flex: 1 1 auto; min-height: 0; overflow: auto; padding: 14px; display: grid;
+    background: repeating-conic-gradient(#191b21 0% 25%, #1d1f26 0% 50%) 50% / 16px 16px;
+  }
+  .canvaswrap { margin: auto; box-shadow: 0 2px 18px #0008; line-height: 0; }
+  .canvaswrap canvas { display: block; cursor: crosshair; }
+
+  footer {
+    flex: 0 0 auto; border-top: 1px solid var(--line); padding: 6px 12px;
+    display: flex; gap: 18px; align-items: center; color: var(--dim);
+    font-variant-numeric: tabular-nums; font-size: 12px; flex-wrap: wrap;
+  }
+  footer b { color: var(--text); font-weight: 600; }
+  #status { margin-left: auto; }
+  .warn { color: var(--warn); }
+  footer b.warn { color: var(--warn); }
+  .bad { color: var(--bad); }
+  footer b.bad { color: var(--bad); }
+  .note { color: var(--dim); font-size: 11px; margin: 6px 0 0; }
+  .note.warn { color: var(--warn); }
+  footer .note { margin: 0; }
+
+  dialog {
+    background: var(--panel); color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: 14px; max-width: min(960px, 96vw);
+  }
+  dialog::backdrop { background: #000a; }
+  dialog h2 { font-size: 14px; margin: 0 0 8px; }
+
+  @media (max-width: 760px) {
+    html, body { height: auto; }
+    body { overflow: auto; }
+    main { flex-direction: column; }
+    aside {
+      order: 1; width: auto; flex: 0 0 auto;
+      border-right: 0; border-top: 1px solid var(--line); overflow-y: visible;
+    }
+    .stage { height: 60vh; min-height: 240px; }
+    .viewbar .spacer { display: none; }
+    .row label { flex: 0 0 100px; }
+    header { position: sticky; top: 0; z-index: 2; background: var(--bg); }
+    header .sub { display: none; }
+    footer { gap: 6px 14px; }
+    #status { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>EdgeDrawing</h1>
+  <span class="sub">image &rarr; one continuous line, for a pen or wire</span>
+  <span class="hspacer"></span>
+  <button class="mini" id="resetAll" title="every control back to its default (the image stays)">Reset all</button>
+  <button class="mini" id="openProject" title="open a saved project (.edl.json): the image and every setting">Open project…</button>
+  <button class="mini" id="saveProject" title="save the image and every setting, to reopen later and get the same drawing">Save project</button>
+  <input type="file" id="projectFile" accept=".json,.edl.json,application/json" hidden>
+</header>
+
+<main>
+  <aside>
+    <details open>
+      <summary>Image</summary>
+      <div class="body">
+        <div id="drop">Drop an image, or click to choose</div>
+        <input type="file" id="file" accept="image/*" hidden>
+        <div class="samples">
+          <button data-sample="monalisa">Mona Lisa</button>
+          <button data-sample="rhino">Rhino</button>
+          <button data-sample="sphere">Sphere</button>
+          <button data-sample="rings">Rings</button>
+        </div>
+      </div>
+    </details>
+
+    <details>
+      <summary>Tone</summary>
+      <div class="body">
+        <div class="row">
+          <label for="gamma">Gamma</label>
+          <input type="range" id="gamma" min="0.4" max="3" step="0.05" value="1">
+          <span class="val" id="gammaVal">1.00</span>
+        </div>
+        <div class="row">
+          <label for="brightness">Brightness</label>
+          <input type="range" id="brightness" min="0.2" max="3" step="0.05" value="1">
+          <span class="val" id="brightnessVal">1.00</span>
+        </div>
+        <div class="row">
+          <label for="saturation">Saturation</label>
+          <input type="range" id="saturation" min="0" max="2" step="0.05" value="1">
+          <span class="val" id="saturationVal">1.00</span>
+        </div>
+        <p class="note">Applied to the image before anything else; the Source view shows the result.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Style</summary>
+      <div class="body">
+        <div id="styleChain"></div>
+        <p class="note">Filters applied to the image, top to bottom, before its edges are found. Tick to use; ↑ ↓ to change the order. Painterly calms texture, so the edges left are the forms'.</p>
+      </div>
+    </details>
+
+    <details open>
+      <summary>Canvas</summary>
+      <div class="body">
+        <div class="row">
+          <label>Units</label>
+          <div class="seg" id="unitSeg">
+            <button data-units="mm" aria-pressed="true">mm</button>
+            <button data-units="in" aria-pressed="false">inches</button>
+          </div>
+        </div>
+        <div class="row">
+          <label for="preset">Size</label>
+          <select id="preset"></select>
+        </div>
+        <div class="row">
+          <label for="widthMm">Width</label>
+          <input type="number" id="widthMm" class="len" min="1" step="any">
+          <span class="unit u"></span>
+        </div>
+        <div class="row">
+          <label for="heightMm">Height</label>
+          <input type="number" id="heightMm" class="len" min="0" step="any">
+          <span class="unit u"></span>
+        </div>
+        <p class="note" id="pieceNote"></p>
+        <p class="note">Height 0 follows the image. A fixed height crops the image to cover the drawing (it is never stretched); a size preset turns to the image's orientation.</p>
+        <div class="row" title="the resolution the edges are found at: finer is slower">
+          <label for="precision">Precision</label>
+          <select id="precision">
+            <option value="rough">Rough draft (700 px)</option>
+            <option value="draft">Draft (1000 px)</option>
+            <option value="normal">Normal (1600 px)</option>
+            <option value="fine">Fine (2400 px)</option>
+          </select>
+        </div>
+      </div>
+    </details>
+
+    <details open>
+      <summary>Edges &amp; detail</summary>
+      <div class="body">
+        <div class="row">
+          <label>Preset</label>
+          <div class="seg" id="detailSeg">
+            <button data-detail="fine" aria-pressed="false">Fine</button>
+            <button data-detail="medium" aria-pressed="true">Medium</button>
+            <button data-detail="coarse" aria-pressed="false">Coarse</button>
+          </div>
+        </div>
+        <div class="row" title="the size the edges are looked for at: larger finds broad, calm edges and misses fine texture">
+          <label for="edgeScale">Edge scale</label>
+          <input type="number" id="edgeScale" class="len" min="0.05" step="any">
+          <span class="unit u"></span>
+        </div>
+        <div class="row" title="how many of the candidate edges start a line: more gives more lines">
+          <label for="edgeAmount">Edge amount</label>
+          <input type="range" id="edgeAmount" min="0.02" max="1" step="0.01">
+          <span class="val" id="edgeAmountVal"></span>
+        </div>
+        <div class="row" title="junctions closer than this merge, and the lines are smoothed at about half of it">
+          <label for="minFeature">Smallest feature</label>
+          <input type="number" id="minFeature" class="len" min="0" step="any">
+          <span class="unit u"></span>
+        </div>
+        <div class="row" title="shorter lines, side branches and loose pieces are left out">
+          <label for="minLength">Shortest line</label>
+          <input type="number" id="minLength" class="len" min="0" step="any">
+          <span class="unit u"></span>
+        </div>
+        <div class="row" title="how far the simplified line may stray from the traced edge; also how far a rounded corner may pass from it">
+          <label for="simplify">Simplify</label>
+          <input type="number" id="simplify" class="len" min="0" step="any">
+          <span class="unit u"></span>
+        </div>
+        <p class="note">All lengths are on the drawing. The Edges view shows what is found, before it is joined into one line.</p>
+      </div>
+    </details>
+
+    <details open>
+      <summary>One line</summary>
+      <div class="body">
+        <div class="row">
+          <div class="seg wide" id="joinSeg">
+            <button data-join="euler" aria-pressed="true" title="trace every edge without lifting: separate pieces are bridged, and where the edges branch the line gets back to a branch over a line again or by a new straight">Trace through (Eulerian)</button>
+            <button data-join="tsp" aria-pressed="false" title="draw each edge once, in the shortest order, jumping straight from one to the next">Jump between (TSP)</button>
+          </div>
+        </div>
+        <div class="row" id="oddRow" title="where the edges branch, the line has to get back to a branch it has not drawn">
+          <label for="oddJoin">Back to a branch</label>
+          <select id="oddJoin">
+            <option value="shorter">Whichever is shorter</option>
+            <option value="retrace">Over a line again</option>
+            <option value="new">By a new straight</option>
+          </select>
+        </div>
+        <div class="row">
+          <label>Start</label>
+          <div class="buttons" style="margin:0">
+            <button class="mini" id="startAuto" title="start at the loose end nearest the top-left corner">Automatic</button>
+            <button class="mini" id="startPick" title="then click on the preview">Pick on preview…</button>
+          </div>
+        </div>
+        <p class="note" id="startNote"></p>
+        <label class="check"><input type="checkbox" id="closed"> End where it starts</label>
+      </div>
+    </details>
+
+    <details open>
+      <summary>Line</summary>
+      <div class="body">
+        <div class="row">
+          <label>Made with</label>
+          <div class="seg" id="mediumSeg">
+            <button data-medium="pen" aria-pressed="true">Pen</button>
+            <button data-medium="wire" aria-pressed="false">Wire</button>
+          </div>
+        </div>
+        <div class="row" title="the pen's line, or the wire's thickness">
+          <label for="lineWidth">Line width</label>
+          <input type="number" id="lineWidth" class="len" min="0" step="any">
+          <span class="unit u"></span>
+        </div>
+        <div class="row" title="no bend tighter than this radius: corners are rounded to at least it; 0 lets a pen turn on the spot">
+          <label for="minRadius">Smallest bend</label>
+          <input type="number" id="minRadius" class="len" min="0" step="any">
+          <span class="unit"><span class="u"></span> radius</span>
+        </div>
+        <label class="check" title="a corner too sharp for the smallest bend becomes a small loop instead of a tight bend"><input type="checkbox" id="loops"> Corner loops</label>
+        <div class="row">
+          <label for="ink">Colour</label>
+          <input type="color" id="ink">
+          <span class="unit">on</span>
+          <input type="color" id="paper">
+        </div>
+        <p class="note">Pen or Wire sets the width and the smallest bend (change them after if you like).</p>
+      </div>
+    </details>
+
+    <details open>
+      <summary>The line &amp; output</summary>
+      <div class="body">
+        <table class="figs" id="figs"></table>
+        <p class="note warn" id="notes"></p>
+        <div class="buttons">
+          <button class="primary" id="printPlan" title="a printable page: figures, the whole drawing, and a 1:1 template across pages; save it as PDF from the print dialog">Print / PDF…</button>
+          <button id="exportSvg" title="the line at true size, one path">Drawing SVG</button>
+          <button id="exportPng">PNG</button>
+        </div>
+        <p class="note">Wire bending instructions (a nail or peg layout, a bend table) are planned: see docs/TODO.md.</p>
+      </div>
+    </details>
+  </aside>
+
+  <section class="preview">
+    <div class="viewbar">
+      <div class="seg" id="viewSeg">
+        <button data-view="drawing" aria-pressed="true">Drawing</button>
+        <button data-view="route" aria-pressed="false" title="the line coloured by what it is doing">Route</button>
+        <button data-view="overlay" aria-pressed="false" title="the line over the image">Overlay</button>
+        <button data-view="edges" aria-pressed="false" title="the edges found, before they are joined">Edges</button>
+        <button data-view="source" aria-pressed="false">Source</button>
+        <button data-view="problems" aria-pressed="false" title="tight corners and crossings">Problems</button>
+      </div>
+      <label class="check">Zoom <select id="zoom">
+        <option value="1">Fit</option><option value="2">2×</option><option value="4">4×</option><option value="8">8×</option>
+      </select></label>
+      <div class="anim" title="draw the line from its start, to see the way it goes">
+        <button class="mini" id="play">▶ Draw</button>
+        <input type="range" id="progress" min="0" max="1000" step="1" value="1000">
+      </div>
+      <div class="spacer"></div>
+      <span id="hint" class="note"></span>
+    </div>
+    <div class="stage" id="stage">
+      <div class="canvaswrap" id="wrap"><canvas id="view"></canvas></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <span>line <b id="statLength">—</b></span>
+  <span title="arcs in the line">bends <b id="statBends">—</b></span>
+  <span title="drawn over a line already there">over again <b id="statRetrace">—</b></span>
+  <span title="bridges, joins and jumps: line that is not an edge of the image">not in image <b id="statJoin">—</b></span>
+  <span title="where the line crosses itself">crossings <b id="statCross">—</b></span>
+  <span title="corners tighter than the smallest bend">tight <b id="statTight">—</b></span>
+  <span>size <b id="statPiece">—</b></span>
+  <span id="status">idle</span>
+</footer>
+
+<dialog id="printDlg">
+  <h2>Printable drawing</h2>
+  <div class="row"><label for="paperSize">Paper</label>
+    <select id="paperSize"><option value="letter">Letter</option><option value="a4">A4</option><option value="tabloid">Tabloid / Ledger</option><option value="a3">A3</option></select></div>
+  <label class="check"><input type="checkbox" id="pSummary" checked> Figures and preview</label>
+  <label class="check"><input type="checkbox" id="pFit" checked> Whole drawing, scaled to one page</label>
+  <label class="check"><input type="checkbox" id="pTemplate" checked> Template at 1:1 (split across pages if needed)</label>
+  <p class="note" id="printNote"></p>
+  <div class="buttons"><button class="primary" id="printGo">Open printable page</button><button id="printClose">Cancel</button></div>
+</dialog>
+
+<script>
+  // A CLASSIC script, deliberately: it still runs when the module graph does
+  // not. Opened from the filesystem the app's imports are CORS-blocked before
+  // any of its code executes, so the UI renders but nothing ever responds.
+  if (location.protocol === 'file:') {
+    var b = document.createElement('div');
+    b.style.cssText = 'position:fixed;inset:0;z-index:99;background:#fff;color:#222;' +
+      'font:14px/1.6 system-ui,sans-serif;padding:40px;max-width:640px;margin:auto;height:max-content';
+    b.innerHTML =
+      '<h2>This page has to be served over HTTP</h2>' +
+      '<p>Browsers block ES module imports from <code>file://</code>, so the app cannot ' +
+      'load its code. No install needed — run the bundled server from this folder:</p>' +
+      '<pre style="background:#f4f4f4;padding:10px">powershell -ExecutionPolicy Bypass -File serve.ps1</pre>' +
+      '<p>then open <a href="http://localhost:8080/">http://localhost:8080/</a>. ' +
+      'Any other static server works too.</p>';
+    document.body.appendChild(b);
+  }
+</script>
+<script type="module" src="./src/app.js"></script>
+</body>
+</html>
