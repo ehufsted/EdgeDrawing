@@ -145,7 +145,9 @@ function validate(s) {
   if (!(s.widthMm > 0)) return 'enter a width';
   if (!(s.heightMm >= 0)) return 'height must be 0 (from the image) or more';
   if (!(s.edgeScale > 0)) return 'the edge scale must be more than 0';
-  if ([s.minFeature, s.minLength, s.simplify, s.lineWidth, s.minRadius].some((v) => !(v >= 0))) return 'lengths cannot be negative';
+  if ([s.minFeature, s.minLength, s.simplify, s.lineWidth, s.minRadius, s.maxStray].some((v) => !(v >= 0))) return 'lengths cannot be negative';
+  if (!(s.fourierScale > 0) || !(s.pidLook > 0)) return 'the length scale and the look ahead must be more than 0';
+  if (!(s.pidP >= 0) || !(s.pidD >= 0)) return 'the gains cannot be negative';
   return '';
 }
 
@@ -323,7 +325,8 @@ function showBendRows() {
   $('fourierGroup').hidden = sm !== 'fourier';
   $('relaxNote').hidden = sm !== 'optimize';
   $('fixRow').hidden = sm === 'pid';   // steering leaves no tight corner to fix
-  $('strayRow').hidden = !(sm === 'optimize' || (sm !== 'pid' && state.s.bendFix !== 'none'));
+  // the stray bounds every fitted arc too (fitArcs' maxDev), so it shows whenever the line is fitted
+  $('strayRow').hidden = sm === 'pid';
 }
 
 // ------------------------------------------------------------------- paint

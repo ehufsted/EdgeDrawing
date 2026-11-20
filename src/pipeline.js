@@ -157,5 +157,7 @@ function validate(s) {
   if (!(s.heightMm >= 0)) throw new Error('height must be 0 (from the image) or more');
   if (!(s.edgeScale > 0)) throw new Error('the edge scale must be more than 0');
   if (!(s.edgeAmount > 0 && s.edgeAmount <= 1)) throw new Error('the edge amount must be between 0 and 100%');
-  if ([s.minFeature, s.minLength, s.simplify, s.minRadius, s.lineWidth].some((v) => !(v >= 0))) throw new Error('lengths cannot be negative');
+  if ([s.minFeature, s.minLength, s.simplify, s.minRadius, s.lineWidth, s.maxStray].some((v) => !(v >= 0))) throw new Error('lengths cannot be negative');
+  if (!(s.fourierScale > 0) || !(s.pidLook > 0)) throw new Error('the length scale and the look ahead must be more than 0');
+  if (!(s.pidP >= 0) || !(s.pidD >= 0)) throw new Error('the gains cannot be negative');
 }

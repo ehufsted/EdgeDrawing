@@ -58,6 +58,12 @@ export function run() {
   const gr = g.path.segs.filter((s) => s.k === 'A').map((s) => s.r);
   check('24-gon: its corners become arcs near the circle\'s radius (25..35)', gr.length === 23 && gr.every((r) => r > 25 && r < 35), `radii ${num(Math.min(...gr), 1)}..${num(Math.max(...gr), 1)}`);
 
+  // a stray budget under the tolerance holds a gentle corner's arc to it, not making it tight
+  const dodec = [];
+  for (let i = 0; i <= 12; i++) dodec.push(100 * Math.cos((2 * Math.PI * i) / 12), 100 * Math.sin((2 * Math.PI * i) / 12));
+  const dd = fitArcs(dodec, kinds(12), { minRadius: 3, tol: 0.5, maxDev: 0.3 });
+  const ddDev = Math.max(...dd.path.segs.filter((s) => s.k === 'A').map((s) => s.r * (1 / Math.cos(Math.abs(s.sweep) / 2) - 1)));
+  check('12-gon, tolerance 0.5, stray budget 0.3: no tight corner, every arc within 0.3 of its corner', dd.tight.length === 0 && ddDev <= 0.3 + 1e-9, `${dd.tight.length} tight, farthest ${num(ddDev, 3)} mm`);
   // a zig-zag of 2 mm steps with a 5 mm radius cannot fit
   const zig = [];
   for (let i = 0; i <= 10; i++) zig.push(2 * i, i % 2 ? 2 : 0);

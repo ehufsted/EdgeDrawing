@@ -69,5 +69,6 @@ export function run() {
     pd.path.segs.length > 10 && pdc.gap < 1e-3 && pdc.kinks === 0 && pdr.every((r) => r >= 3 - 1e-6) && pd.tight.length === 0,
     `${num(pd.stats.length, 0)} mm, tightest ${num(Math.min(...pdr), 2)} mm, stray ${num(pd.stats.strayMax, 2)} / ${num(pd.stats.strayMean, 2)} mm`);
   const pc = runPipeline(rings, { ...base, closed: true }, {});
+let refusedNeg = '';  try { runPipeline(rings, { ...base, maxStray: -1 }, {}); } catch (e) { refusedNeg = e.message; }  check('a negative stray is refused, not used', refusedNeg === 'lengths cannot be negative', refusedNeg);
   check('closed: ends where it starts', Math.hypot(pc.start.x - pc.end.x, pc.start.y - pc.end.y) < 1e-6, '');
 }

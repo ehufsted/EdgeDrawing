@@ -120,9 +120,17 @@ export function fitArcs(pts, kinds, o) {
       // other: rounded with all the room it has, a near reversal would cut the
       // stroke back by a whole straight for an arc of almost no radius
       else if (r[i] < minR - EPS) r[i] = Math.min(r[i], near[i]);
-      // an arc that would pass farther than maxDev from its corner (the smallest bend
-      // in a sharp V cuts its tip off) counts as tight too, and keeps to the corner
-      else if (r[i] * (1 / Math.cos(Math.min(th[i] / 2, Math.PI / 2 - 1e-6)) - 1) > maxDev) r[i] = Math.min(r[i], near[i], minR - 2 * EPS);
+      else {
+        // an arc may pass no farther than maxDev from its corner: the radius is held
+        // to the one that passes exactly there, and only if that is under the
+        // smallest bend (the smallest bend in a sharp V cuts its tip off) is the
+        // corner tight, kept to its point like any other tight corner
+        const dev = 1 / Math.cos(Math.min(th[i] / 2, Math.PI / 2 - 1e-6)) - 1;
+        if (r[i] * dev > maxDev) {
+          r[i] = Math.min(r[i], maxDev / dev);
+          if (r[i] < minR - EPS) r[i] = Math.min(r[i], near[i]);
+        }
+      }
     }
     if (!changed) break;
   }
