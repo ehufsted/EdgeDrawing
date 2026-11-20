@@ -11,7 +11,7 @@
 // is what the SVG and the printout carry. The line's colours are display only
 // and never re-run the worker; its width is drawn true to size.
 
-import { DEFAULTS, PRESETS, MEDIA, toMm, pieceGeometry, applyTone } from './core/units.js';
+import { DEFAULTS, PRESETS, PID_D_MAX, toMm, pieceGeometry, applyTone } from './core/units.js';
 import { normalizeHex } from './core/color.js';
 import { drawingSVG, downloadFile, arrowAt } from './core/svg.js';
 import { planHTML, PAPERS, pageWindows, printable, fmtLen, longText } from './core/printout.js';
@@ -274,8 +274,7 @@ function showJoin() {
   $('closed').checked = state.s.closed;
 }
 
-function showMedium() {
-  for (const b of document.querySelectorAll('#mediumSeg button')) b.setAttribute('aria-pressed', String(b.dataset.medium === state.s.medium));
+function showLine() {
   $('loops').checked = state.s.loops;
 }
 
@@ -303,19 +302,17 @@ function bindLine() {
   $('startAuto').addEventListener('click', () => { setPicking(false); if (state.s.start) { state.s.start = null; scheduleRun(0); } renderStartNote(); });
   $('startPick').addEventListener('click', () => setPicking(!state.picking));
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.picking) setPicking(false); });
-  for (const b of document.querySelectorAll('#mediumSeg button')) {
-    b.addEventListener('click', () => {
-      state.s.medium = b.dataset.medium;
-      Object.assign(state.s, MEDIA[state.s.medium]);
-      showMedium();
-      showLengths();
-      scheduleRun(0);
-    });
-  }
   $('loops').addEventListener('change', () => { state.s.loops = $('loops').checked; scheduleRun(0); });
   for (const id of BEND_IDS) $(id).addEventListener('change', () => { state.s[id] = $(id).value; showBendRows(); scheduleRun(0); });
   for (const id of GAIN_IDS) {
-    $(id).addEventListener('input', () => { const v = parseFloat($(id).value); if (v >= 0) { state.s[id] = v; scheduleRun(); } });
+    $(id).addEventListener('input', () => {
+      const v = parseFloat($(id).value);
+      if (!(v >= 0)) return;
+      state.s[id] = id === 'pidD' ? Math.min(PID_D_MAX, v) : v;
+      scheduleRun();
+    });
+    // a D typed above the cap shows as the cap once the field is left
+    $(id).addEventListener('change', () => { $(id).value = state.s[id]; });
   }
 }
 
@@ -586,7 +583,7 @@ function updateStats() {
   setStat('statBends', String(st.bends));
   setStat('statRetrace', pct(st.retrace, st.length), st.retrace / Math.max(1, st.length) > 0.25 ? 'warn' : '');
   setStat('statJoin', pct(st.join, st.length), st.join / Math.max(1, st.length) > 0.25 ? 'warn' : '');
-  setStat('statCross', String(st.crossings), state.s.medium === 'wire' && st.crossings ? 'warn' : '');
+  setStat('statCross', String(st.crossings), st.crossings ? 'warn' : '');
   setStat('statTight', String(st.tight), st.tight ? 'bad' : '');
   setStat('statPiece', `${fmtLen(plan.piece.W, state.units, 1)} × ${fmtLen(plan.piece.H, state.units, 1)} ${unitLabel()}`);
 }
@@ -641,7 +638,7 @@ function bindExports() {
     const html = planHTML(plan, {
       paper: $('paperSize').value, units: state.units, title: `${state.imageName} — single-line drawing`,
       summary: $('pSummary').checked, fit: $('pFit').checked, template: $('pTemplate').checked,
-      previewURL: renderPNG(plan, 'drawing', 1400), lineWidth: state.s.lineWidth, medium: state.s.medium,
+      previewURL: renderPNG(plan, 'drawing', 1400), lineWidth: state.s.lineWidth, minRadius: state.s.minRadius,
     });
     const w = window.open('', '_blank');
     if (!w) { setStatus('the browser blocked the new window: allow pop-ups for this page', 'bad'); return; }
@@ -777,7 +774,7 @@ function applySettings(units, s, disp) {
   $('precision').value = s.precision;
   buildStyleUI();
   showJoin();
-  showMedium();
+  showLine();
   $('ink').value = disp.ink;
   $('paper').value = disp.paper;
   $('preset').value = state.preset;

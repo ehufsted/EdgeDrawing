@@ -33,10 +33,11 @@ smoothing, merge / remove / optimize; see docs/architecture.md for the numbers.
 - **Fewer arcs from Fourier, optimize and PID.** Their lines are thousands of short
   arcs; merge runs of nearly equal curvature (within a tolerance) into one arc,
   for a bend table a person can follow.
-- **Steering that loses the line.** With D = 2 (pen, Mona Lisa) the steering goes
-  unstable and the average stray reaches 78 mm: the progress window cannot find
-  the line again. Detect it (far from the line for long) and re-acquire, or
-  bound D.
+- **Steering that loses the line.** D is capped at 2 and the default bend is
+  3 mm, where D 2 holds the line (mean stray 3 to 4 mm). With the bend set to 0
+  (capped at look/4), D 2 lost the line on the Mona Lisa (78 mm mean stray): the
+  progress window cannot find it again. Detect that (far from the line for long)
+  and re-acquire.
 - **PID ripple.** A faint ripple on some steered strokes at 4×: tune the step
   (now R/4, at most look/8 and 0.5 mm) against D, or low-pass the curvature.
 - **PID end of stroke.** Steer onto the exact end point and heading of each stroke

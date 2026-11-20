@@ -122,11 +122,11 @@ export function runPipeline(rgba, settings, opts = {}) {
   const L = (mm) => (mm >= 1000 ? `${(mm / 1000).toFixed(2)} m` : `${Math.round(mm)} mm`);
   if (!g.edges.length) notes.push('no edges found: lower the edge scale or raise the edge amount (or the image has no edges stronger than 4% contrast)');
   if (stats.components > 1 && s.join === 'euler') notes.push(`${stats.components} separate pieces, joined by ${stats.bridges} ${stats.bridges === 1 ? 'bridge' : 'bridges'}`);
-  if (st.retrace > 0) notes.push(`${L(st.retrace)} of the line goes over itself again (${Math.round((100 * st.retrace) / st.length)}%)${s.medium === 'wire' ? ': two wires side by side there' : ''}`);
+  if (st.retrace > 0) notes.push(`${L(st.retrace)} of the line goes over itself again (${Math.round((100 * st.retrace) / st.length)}%): two wires side by side there`);
   if (st.join > 0) notes.push(`${L(st.join)} of the line is not in the image (${s.join === 'tsp' ? 'jumps between strokes' : 'bridges and joins'})`);
   if (D.tight.length) notes.push(`${D.tight.length} ${D.tight.length === 1 ? 'corner is' : 'corners are'} tighter than the ${s.minRadius} mm bend radius (the Problems view shows where): raise Smallest feature, or turn on corner loops`);
   if (D.loops) notes.push(`${D.loops} corner ${D.loops === 1 ? 'loop' : 'loops'}`);
-  if (s.medium === 'wire' && D.crossings.length) notes.push(`the wire crosses itself ${D.crossings.length} ${D.crossings.length === 1 ? 'time' : 'times'}: it lifts by its thickness at each`);
+  if (D.crossings.length) notes.push(`the wire crosses itself ${D.crossings.length} ${D.crossings.length === 1 ? 'time' : 'times'}: it lifts by its thickness at each`);
   if (B.graph.stats.pieces) notes.push(`${B.graph.stats.pieces} small ${B.graph.stats.pieces === 1 ? 'piece' : 'pieces'} under the shortest line left out`);
 
   return {

@@ -45,14 +45,11 @@ export const PRESETS = [
 export const PRECISION = { rough: 700, draft: 1000, normal: 1600, fine: 2400 };
 
 /**
- * What the line is made of. Choosing one sets the line width and the smallest
- * bend radius to these (the person can change both after). A pen can turn on the
- * spot; wire cannot be bent tighter than a few times its own thickness.
+ * The steering's D gain is held to this (the user's cap). The stray grows with
+ * D: measured with a 3 mm bend, mean 0.9 to 1.25 mm at D 0 to 1, 2.8 to 4.3 mm
+ * at D 2; with the 1 mm cap a pen had, D 2 lost the line altogether.
  */
-export const MEDIA = {
-  pen: { lineWidth: 0.5, minRadius: 0, loops: false },
-  wire: { lineWidth: 1.2, minRadius: 3, loops: false },
-};
+export const PID_D_MAX = 2;
 
 export const DEFAULTS = {
   widthMm: 300,
@@ -77,14 +74,13 @@ export const DEFAULTS = {
   start: null,           // {x, y} mm, where the line should start; null = automatic
   closed: false,         // end where it started
   // the line itself (core/arcs.js)
-  medium: 'pen',         // 'pen' | 'wire' (MEDIA)
-  lineWidth: 0.5,        // mm
-  minRadius: 0,          // mm, the tightest bend allowed
+  lineWidth: 1.2,        // mm, the wire's thickness (or the pen's line)
+  minRadius: 3,          // mm, the tightest bend allowed (wire cannot bend tighter than a few times its thickness)
   loops: false,          // a corner too sharp to bend becomes a small loop
   // smoothing the line (core/bends.js)
   smoothing: 'pid',      // the whole line: 'pid' (steered, never tighter than the bend) | 'fourier' | 'optimize' (relax) | 'none'
   pidLook: 4,            // mm, pid: how far ahead on the traced line the steering aims
-  pidP: 1, pidD: 1,      // pid: the steering's gains, proportional and derivative (P = 2 would be pure pursuit)
+  pidP: 1, pidD: 1,      // pid: the steering's gains, proportional and derivative (P = 2 would be pure pursuit); D at most PID_D_MAX
   fourierScale: 12,      // mm, fourier: wiggles shorter than this are smoothed out (half of one this long kept)
   maxStray: 3,           // mm, how far relax (and merge or remove) may move the line off the traced edges
   // experimental (the Experimental smoothing tab)

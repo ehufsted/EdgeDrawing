@@ -16,7 +16,7 @@
 // at all, or is from a newer version, is refused.
 
 import { normalizeHex } from './color.js';
-import { DEFAULTS, PRECISION, MEDIA } from './units.js';
+import { DEFAULTS, PRECISION, PID_D_MAX } from './units.js';
 import { normalizeStyle } from './style.js';
 
 export const PROJECT_VERSION = 1;
@@ -28,11 +28,11 @@ const NUMS = {
   saturation: (x) => x >= 0, edgeScale: (x) => x > 0, edgeAmount: (x) => x > 0 && x <= 1,
   minFeature: (x) => x >= 0, minLength: (x) => x >= 0, simplify: (x) => x >= 0,
   lineWidth: (x) => x >= 0, minRadius: (x) => x >= 0, maxStray: (x) => x >= 0,
-  fourierScale: (x) => x > 0, pidLook: (x) => x > 0, pidP: (x) => x >= 0, pidD: (x) => x >= 0,
+  fourierScale: (x) => x > 0, pidLook: (x) => x > 0, pidP: (x) => x >= 0, pidD: (x) => x >= 0 && x <= PID_D_MAX,
 };
 /** The settings that are one of a few words. */
 const ENUMS = {
-  join: ['euler', 'tsp'], oddJoin: ['retrace', 'new', 'shorter'], medium: Object.keys(MEDIA),
+  join: ['euler', 'tsp'], oddJoin: ['retrace', 'new', 'shorter'],
   joinShape: ['straight', 'dubins'], walk: ['step', 'pairs'], smoothing: ['pid', 'fourier', 'optimize', 'none'], bendFix: ['none', 'merge', 'remove'], bendSmooth: ['uniform', 'tight'],
 };
 const BOOLS = ['closed', 'loops'];

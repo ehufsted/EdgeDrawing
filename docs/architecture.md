@@ -169,3 +169,7 @@ saved with a smoothing under `bendFix` are read into `smoothing`.
 - The integral term was removed at the user's request (2026-11-19): the steering
   is a PD controller, P 1 and D 1 by default. (The setting keeps its id 'pid',
   so projects open unchanged; a saved I gain is ignored.)
+- The pen / wire choice was removed at the user's request: the defaults are the
+  wire's (1.2 mm, 3 mm bend), and D is capped at 2 (PID_D_MAX). Stray against D
+  with a 3 mm bend (draft precision): Mona Lisa mean 1.12 / 1.15 / 1.25 / 2.03 /
+  2.81 mm at D 0 / 0.5 / 1 / 1.5 / 2; rhino 0.92 / 1.07 / 1.22 / 2.28 / 4.34 mm.

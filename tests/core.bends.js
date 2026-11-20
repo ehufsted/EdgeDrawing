@@ -137,6 +137,7 @@ export function run() {
   const sp = steerLine([0, 0, 60, 0], ['edge'], 3, {});
   const spEnd = sp.path.segs[sp.path.segs.length - 1];
   check('PID on a straight: a straight, ending at its end', sp.path.segs.every((s) => s.k === 'L') && Math.abs(spEnd.x - 60) < 0.5 && Math.abs(spEnd.y) < 1e-9, `${sp.path.segs.length} segs, ends at ${num(spEnd.x, 2)}, ${num(spEnd.y, 3)}`);
+const capped = JSON.stringify(steerLine(notch.pts, Array(4).fill('edge'), 3, { d: 5 }).path), atCap = JSON.stringify(steerLine(notch.pts, Array(4).fill('edge'), 3, { d: 2 }).path);  check('PID: a D above 2 steers as D 2 (the cap)', capped === atCap, '');
   const pn = fitLine([notch], { minRadius: 3, tol: 0.3, smoothing: 'pid', pid: { look: 6 } });
   const pnc = continuity(pn.path, 1e-6);
   check('PID over the notch: no arc tighter than 3 mm, tangent throughout, nothing tight', radii(pn.path).every((r) => r >= 3 - 1e-9) && pnc.kinks === 0 && pn.tight.length === 0,

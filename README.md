@@ -26,8 +26,8 @@ or a length of wire can be bent to.
     find, jumping straight from the end of one to the start of the next.
   - *Start*: automatic (the loose end nearest the top-left corner) or picked on
     the preview. *End where it starts* closes the line.
-- **Line:** *Pen* or *Wire* sets the line width and the smallest bend radius
-  (0.5 mm and none; 1.2 mm and 3 mm). Every corner is rounded by an arc that
+- **Line:** *Line width* (1.2 mm wire by default) and the *Smallest bend*
+  radius (3 mm by default; 0 lets a pen turn on the spot). Every corner is rounded by an arc that
   passes within *Simplify* of it, and never tighter than the smallest bend; a
   corner that cannot get it is reported (the Problems view shows where), or with
   *Corner loops* on becomes a small loop round a circle of that radius. With a
@@ -36,7 +36,7 @@ or a length of wire can be bent to.
 - **Smoothing** of the whole line:
   - *Steer it (PD)*, the default: the line is driven along the traced edges at
     constant speed, aiming a *Look ahead* distance ahead, its steering a PID
-    controller (*P · D*, default 1 · 1; no integral term) on the heading error, its turning
+    controller (*P · D*, default 1 · 1, D at most 2; no integral term) on the heading error, its turning
     never tighter than the smallest bend (for a pen, a quarter of the look
     ahead). No corner can be tight; the line strays instead. A shorter look ahead
     follows closer, a longer one is calmer and loopier.

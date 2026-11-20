@@ -327,19 +327,12 @@
     <details open>
       <summary>Line</summary>
       <div class="body">
-        <div class="row">
-          <label>Made with</label>
-          <div class="seg" id="mediumSeg">
-            <button data-medium="pen" aria-pressed="true">Pen</button>
-            <button data-medium="wire" aria-pressed="false">Wire</button>
-          </div>
-        </div>
-        <div class="row" title="the pen's line, or the wire's thickness">
+        <div class="row" title="the wire's thickness, or a pen's line">
           <label for="lineWidth">Line width</label>
           <input type="number" id="lineWidth" class="len" min="0" step="any">
           <span class="unit u"></span>
         </div>
-        <div class="row" title="no bend tighter than this radius: corners are rounded to at least it; 0 lets a pen turn on the spot">
+        <div class="row" title="no bend tighter than this radius: corners are rounded to at least it (wire cannot bend tighter than a few times its thickness)">
           <label for="minRadius">Smallest bend</label>
           <input type="number" id="minRadius" class="len" min="0" step="any">
           <span class="unit"><span class="u"></span> radius</span>
@@ -351,7 +344,6 @@
           <span class="unit">on</span>
           <input type="color" id="paper">
         </div>
-        <p class="note">Pen or Wire sets the width and the smallest bend (change them after if you like).</p>
       </div>
     </details>
 
@@ -373,10 +365,10 @@
             <input type="number" id="pidLook" class="len" min="0.5" step="any">
             <span class="unit u"></span>
           </div>
-          <div class="row" title="P: turn toward the aim (2 = pure pursuit) · D: damp the swing out of a turn">
+          <div class="row" title="P: turn toward the aim (2 = pure pursuit) · D: damp the swing out of a turn, at most 2">
             <label>Gains P · D</label>
             <input type="number" id="pidP" min="0" step="0.1" style="width:56px">
-            <input type="number" id="pidD" min="0" step="0.1" style="width:56px">
+            <input type="number" id="pidD" min="0" max="2" step="0.1" style="width:56px">
           </div>
           <p class="note">The line drives along the traced edges at constant speed, aiming the look-ahead distance ahead, never turning tighter than the smallest bend: no corner can be tight, it strays instead.</p>
         </div>

@@ -49,6 +49,7 @@
 
 import { routePolyline, fitArcs, samplePath } from './arcs.js';
 import { dubins } from './dubins.js';
+import { PID_D_MAX } from './units.js';
 
 const MAX_ROUNDS = 200;
 const OPT_ITER = 400;
@@ -476,7 +477,7 @@ export function fourierLine(pts, kinds, lambda, R) {
  * @returns {{path, h0, h1, steps}}
  */
 export function steerLine(pts, kinds, R, g) {
-  const look = Math.max(0.5, g.look ?? 4), P = g.p ?? 1, D = g.d ?? 1;
+  const look = Math.max(0.5, g.look ?? 4), P = g.p ?? 1, D = Math.min(PID_D_MAX, g.d ?? 1);
   // no bend (a pen) still turns no tighter than a quarter of the look ahead: uncapped,
   // the controller swings at the scale of one step and chatters
   const kMax = 1 / Math.max(R, look / 4);
