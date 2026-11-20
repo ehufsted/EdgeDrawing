@@ -25,7 +25,7 @@ const STORE = 'edgedrawing.v1';
 
 const LEN_IDS = ['widthMm', 'heightMm', 'edgeScale', 'minFeature', 'minLength', 'simplify', 'lineWidth', 'minRadius', 'maxStray', 'fourierScale', 'pidLook'];
 const GAIN_IDS = ['pidP', 'pidI', 'pidD'];   // the steering's gains: plain numbers
-const BEND_IDS = ['joinShape', 'walk', 'bendFix', 'bendSmooth'];   // the bend experiments' selects
+const BEND_IDS = ['smoothing', 'joinShape', 'walk', 'bendFix', 'bendSmooth'];   // the smoothing selects
 
 /** The Edges & detail presets, mm (edgeAmount a share). */
 const DETAIL = {
@@ -319,12 +319,14 @@ function bindLine() {
   }
 }
 
-/** Each tight-corner fix's own controls, shown only with it. */
+/** Each smoothing's own controls, shown only with it; the stray where something uses it. */
 function showBendRows() {
-  const fix = state.s.bendFix;
-  $('fourierRow').hidden = fix !== 'fourier';
-  $('pidGroup').hidden = fix !== 'pid';
-  $('strayRow').hidden = fix === 'fourier' || fix === 'pid';
+  const sm = state.s.smoothing;
+  $('pidGroup').hidden = sm !== 'pid';
+  $('fourierGroup').hidden = sm !== 'fourier';
+  $('relaxNote').hidden = sm !== 'optimize';
+  $('fixRow').hidden = sm === 'pid';   // steering leaves no tight corner to fix
+  $('strayRow').hidden = !(sm === 'optimize' || (sm !== 'pid' && state.s.bendFix !== 'none'));
 }
 
 // ------------------------------------------------------------------- paint

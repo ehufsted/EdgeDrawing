@@ -81,14 +81,16 @@ export const DEFAULTS = {
   lineWidth: 0.5,        // mm
   minRadius: 0,          // mm, the tightest bend allowed
   loops: false,          // a corner too sharp to bend becomes a small loop
-  // enforcing the smallest bend (core/bends.js), experiments to compare
+  // smoothing the line (core/bends.js)
+  smoothing: 'pid',      // the whole line: 'pid' (steered, never tighter than the bend) | 'fourier' | 'optimize' (relax) | 'none'
+  pidLook: 4,            // mm, pid: how far ahead on the traced line the steering aims
+  pidP: 1, pidI: 0, pidD: 1,     // pid: the gains (P = 2 would be pure pursuit)
+  fourierScale: 12,      // mm, fourier: wiggles shorter than this are smoothed out (half of one this long kept)
+  maxStray: 3,           // mm, how far relax (and merge or remove) may move the line off the traced edges
+  // experimental (the Experimental smoothing tab)
   joinShape: 'straight', // 'straight' | 'dubins': joins as the shortest paths no tighter than the bend
   walk: 'step',          // euler: 'step' (straightest way on, step by step) | 'pairs' (straightest pairing at every node)
-  bendFix: 'none',       // tight corners: 'none' (reported) | 'merge' | 'remove' | 'optimize' | 'fourier' | 'pid'
-  maxStray: 3,           // mm, how far a fix may move the line off the traced edges (not fourier or pid)
-  fourierScale: 12,      // mm, fourier: wiggles shorter than this are smoothed out (half of one this long kept)
-  pidLook: 6,            // mm, pid: how far ahead on the traced line the steering aims
-  pidP: 2, pidI: 0, pidD: 0.5,   // pid: the gains (P = 2 is pure pursuit)
+  bendFix: 'none',       // tight corners after the fit: 'none' (reported) | 'merge' | 'remove' (not with pid)
   bendSmooth: 'uniform', // with a bend: 'uniform' (smoothed at two radii) | 'tight' (only where tighter than the bend)
 };
 

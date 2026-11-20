@@ -33,26 +33,35 @@ or a length of wire can be bent to.
   *Corner loops* on becomes a small loop round a circle of that radius. With a
   bend radius set, the edges are smoothed at two radii, since a line cannot bend
   round a smaller detail.
-- **Keeping to the bend (experiments, with a bend radius above 0):**
+- **Smoothing** of the whole line:
+  - *Steer it (PID)*, the default: the line is driven along the traced edges at
+    constant speed, aiming a *Look ahead* distance ahead, its steering a PID
+    controller (*P · I · D*, default 1 · 0 · 1) on the heading error, its turning
+    never tighter than the smallest bend (for a pen, a quarter of the look
+    ahead). No corner can be tight; the line strays instead. A shorter look ahead
+    follows closer, a longer one is calmer and loopier.
+  - *Fourier smoothing*: wiggles shorter than a *Length scale* are taken out, the
+    same everywhere; the ends of each stroke stay put. It does not hold to the
+    bend: a longer scale leaves fewer tight places.
+  - *Relax the whole line*: every point bending tighter than the smallest bend
+    moves toward its neighbours, within *Stray at most* (needs a bend above 0).
+  - *None*: straights and arcs fitted to the traced line as it is.
+- **Experimental smoothing** (closed by default; with a bend above 0):
   - *Joins: curves at the bend (Dubins)*: every join becomes the shortest path
     that leaves a stroke the way it was going and meets the next stroke the way
     that one goes, never tighter than the bend.
   - *Through junctions: straightest pairing overall*: at every junction the
     ways in and out are paired straightest first, and the pieces spliced into one
     line, instead of choosing the straightest next step as it goes.
-  - *Tight corners*: report them; *merge* a tight corner and its neighbours into
-    one corner that has room; *cut their points out* one by one; or *relax the
-    whole line* toward the bend. Each keeps within *Stray at most* of the traced
-    edges (the arcs too: a bend that would cut a sharp tip off by more is
-    reported as tight instead). Two more, controlled by their own settings
-    instead of the stray: *Fourier smoothing* takes out wiggles shorter than a
-    *Length scale*; *Steer it (PID)* drives the line along at constant speed,
-    turning no tighter than the bend, aiming a *Look ahead* distance along the
-    traced line with P, I and D gains: never tight, only stray.
-  - *Smoothing: only where tighter than the bend*, instead of everywhere at two
-    radii.
+  - *Tight corners* left after the fit (not with steering, which leaves none):
+    report them; *merge* a tight corner and its neighbours into one corner that
+    has room; or *cut their points out* one by one, within *Stray at most* (the
+    arcs too: a bend that would cut a sharp tip off by more is reported as tight
+    instead).
+  - *Edge smoothing: only where tighter than the bend*, instead of everywhere at
+    two radii.
 - **The line's figures:** length (how much draws the image's edges, goes over a
-  line again, or is not in the image), bends, the tightest bend, corners tighter
+  line again, or is not in the image), bends, the tightest bend, places tighter
   than the smallest bend, loops, how far the line strays from the edges (at
   most and on average), crossings.
 

@@ -148,3 +148,21 @@ once, so a densely sampled line is not counted per vertex). Same settings.
   merging into fewer arcs of nearly equal curvature (a TODO).
 - Where a steered stroke stops just short of its end, the Dubins join to the
   next stroke makes a small S-bend at the radius.
+
+### Smoothing settled (user's choice)
+
+The user found the PID steering best (about P 1, I 0, D 1, varying the look
+ahead) and Fourier stylistically interesting. So `smoothing` is now its own
+setting for the whole line, 'pid' by default (look ahead 4 mm), with 'fourier',
+'optimize' (relax) and 'none'; Dubins joins, the paired walk, merge / remove and
+tight-only edge smoothing moved to the Experimental smoothing tab. Projects
+saved with a smoothing under `bendFix` are read into `smoothing`.
+
+- A pen (no bend) still caps the steering at a quarter of the look ahead:
+  uncapped, the controller swung at the scale of one step (the Mona Lisa came
+  out as hundreds of thousands of tiny arcs and overflowed the crossing count).
+  Pen Mona Lisa, Medium: 9.3 m, stray 6.3 / 1.3 mm, about 18,500 arcs.
+- Crossings are now found per segment (a set of candidates each) and merged in
+  bins, so a dense line cannot exhaust memory.
+- Seen at 4× in pen mode: a faint ripple on some steered strokes; P, D or the
+  step length could calm it.

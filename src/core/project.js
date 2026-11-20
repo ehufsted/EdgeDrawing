@@ -33,7 +33,7 @@ const NUMS = {
 /** The settings that are one of a few words. */
 const ENUMS = {
   join: ['euler', 'tsp'], oddJoin: ['retrace', 'new', 'shorter'], medium: Object.keys(MEDIA),
-  joinShape: ['straight', 'dubins'], walk: ['step', 'pairs'], bendFix: ['none', 'merge', 'remove', 'optimize', 'fourier', 'pid'], bendSmooth: ['uniform', 'tight'],
+  joinShape: ['straight', 'dubins'], walk: ['step', 'pairs'], smoothing: ['pid', 'fourier', 'optimize', 'none'], bendFix: ['none', 'merge', 'remove'], bendSmooth: ['uniform', 'tight'],
 };
 const BOOLS = ['closed', 'loops'];
 
@@ -64,7 +64,9 @@ export function parseProject(json) {
   else if (im.kind === 'file' && typeof im.dataURL === 'string' && /^data:image\//.test(im.dataURL)) image = { kind: 'file', name: String(im.name || 'image'), dataURL: im.dataURL };
   else problems.push('no usable image in the project');
 
-  const src = o.settings && typeof o.settings === 'object' ? o.settings : {};
+  const src = o.settings && typeof o.settings === 'object' ? { ...o.settings } : {};
+  // saved while the line smoothings were tight-corner fixes: they are the smoothing now
+  if (['pid', 'fourier', 'optimize'].includes(src.bendFix) && src.smoothing === undefined) { src.smoothing = src.bendFix; src.bendFix = 'none'; }
   const settings = { ...DEFAULTS };
   for (const [k, ok] of Object.entries(NUMS)) {
     if (src[k] === undefined) continue;

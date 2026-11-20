@@ -97,11 +97,12 @@ export function run() {
   const base = fitLine([notch], { minRadius: 3, tol: 0.3, fix: 'none' });
   check('the notch is tight unfixed', base.tight.length > 0, `${base.tight.length} tight`);
   for (const fix of ['merge', 'remove', 'optimize']) {
-    const f = fitLine([notch], { minRadius: 3, tol: 0.3, fix, maxStray: 3 });
+    const how = fix === 'optimize' ? { smoothing: 'optimize' } : { fix };
+    const f = fitLine([notch], { minRadius: 3, tol: 0.3, ...how, maxStray: 3 });
     const c = continuity(f.path);
     check(`${fix}: no tight corner within a 3 mm stray (plus the 0.3 tolerance), still one tangent line`, f.tight.length === 0 && f.stray.max <= 3 + 0.3 + 0.05 && c.gap < 1e-6 && c.kink < 1e-6,
       `${f.tight.length} tight, stray ${num(f.stray.max, 2)} mm, kink ${c.kink.toExponential(1)}`);
-    const g = fitLine([notch], { minRadius: 3, tol: 0.3, fix, maxStray: 1 });
+    const g = fitLine([notch], { minRadius: 3, tol: 0.3, ...how, maxStray: 1 });
     check(`${fix}: within 1 mm it cannot, and says so`, g.tight.length > 0 && g.stray.max <= 1 + 0.3 + 0.05, `${g.tight.length} tight, stray ${num(g.stray.max, 2)} mm`);
   }
 
@@ -127,7 +128,7 @@ export function run() {
   }
   check('Fourier, λ = 10 mm: the 2 mm wiggle is gone, the 200 mm bow kept', wig < 0.05 && bow > 4.9 && bow < 5.1, `wiggle left ${num(wig, 3)} mm, bow ${num(bow, 3)} mm`);
   check('...and the ends do not move', fw.pts[0] === wav[0] && fw.pts[1] === wav[1] && fw.pts[2 * n2 - 2] === wav[wav.length - 2] && fw.pts[2 * n2 - 1] === wav[wav.length - 1], '');
-  const fn = fitLine([notch], { minRadius: 3, tol: 0.3, fix: 'fourier', fourierScale: 15 });
+  const fn = fitLine([notch], { minRadius: 3, tol: 0.3, smoothing: 'fourier', fourierScale: 15 });
   const fnc = continuity(fn.path, 1e-3);   // near-straight arcs of huge radius carry ~1e-5 rad of rounding
   check('Fourier, λ = 15 mm: the notch is no longer tight, one tangent line', fn.tight.length === 0 && fnc.gap < 1e-6 && fnc.kinks === 0, `${fn.tight.length} tight, stray ${num(fn.stray.max, 2)} mm, ${fnc.kinks} kinks, worst ${fnc.kink.toExponential(1)}`);
 
@@ -136,7 +137,7 @@ export function run() {
   const sp = steerLine([0, 0, 60, 0], ['edge'], 3, {});
   const spEnd = sp.path.segs[sp.path.segs.length - 1];
   check('PID on a straight: a straight, ending at its end', sp.path.segs.every((s) => s.k === 'L') && Math.abs(spEnd.x - 60) < 0.5 && Math.abs(spEnd.y) < 1e-9, `${sp.path.segs.length} segs, ends at ${num(spEnd.x, 2)}, ${num(spEnd.y, 3)}`);
-  const pn = fitLine([notch], { minRadius: 3, tol: 0.3, fix: 'pid', pid: { look: 6 } });
+  const pn = fitLine([notch], { minRadius: 3, tol: 0.3, smoothing: 'pid', pid: { look: 6 } });
   const pnc = continuity(pn.path, 1e-6);
   check('PID over the notch: no arc tighter than 3 mm, tangent throughout, nothing tight', radii(pn.path).every((r) => r >= 3 - 1e-9) && pnc.kinks === 0 && pn.tight.length === 0,
     `tightest ${num(Math.min(...radii(pn.path)), 2)} mm, stray ${num(pn.stray.max, 2)} mm`);

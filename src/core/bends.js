@@ -1,17 +1,35 @@
-// Enforcing the smallest bend: experiments, each a setting, to compare.
+// Smoothing the line, and keeping it to the smallest bend.
 //
 // The line comes from core/route.js as runs of 'edge', 'retrace' and 'join'.
 // core/arcs.js fits straights and arcs to it, and reports the corners it cannot
-// round at the smallest radius (TIGHT). These options try to leave fewer:
+// round at the smallest radius (TIGHT).
+//
+// LINE SMOOTHING (smoothing), the whole line:
+//   'pid'       (the default) STEERED at constant speed, the curvature capped at
+//               1/R, aiming ahead on the traced line through a PID controller
+//               (steerLine): never tight by construction, only stray
+//   'fourier'   low-passed in the frequency domain: wiggles shorter than a length
+//               scale L are taken out (fourierLine). Not held to the stray, nor
+//               to the bend: L is the control
+//   'optimize'  ("relax the whole line") split every R/3, then relaxed: each
+//               point turning tighter than an arc of the radius could moves
+//               toward its neighbours' midpoint, each point is pulled back toward
+//               where it was traced, never past the stray, and this repeated (a
+//               projected smoothing, as in position-based dynamics). Its line is
+//               many short arcs: simplified, the uneven spacing undid it
+//   'none'      straights and arcs fitted to the traced line as it is
+//
+// EXPERIMENTAL (the app's Experimental smoothing tab):
 //
 // JOINS AS DUBINS PATHS (joins: 'dubins'). A join is not in the image, so it
 // may take any shape: each run of joins becomes the shortest path that leaves
 // the end of one stroke in the direction the stroke was going and arrives at
 // the next stroke's start in its direction, never tighter than the smallest
-// radius (core/dubins.js). The strokes are fitted on their own, so the corner
-// where a join met a stroke is gone: the join is tangent to both.
+// radius (core/dubins.js). The strokes are smoothed and fitted on their own, so
+// the corner where a join met a stroke is gone: the join is tangent to both.
 //
-// TIGHT CORNERS FIXED (fix), each held to MAX STRAY mm from the traced edges:
+// TIGHT CORNERS FIXED after the fit (fix; not with 'pid', which has none), each
+// held to MAX STRAY mm from the traced edges:
 //   'merge'     a tight corner and its neighbours, as few as it takes, become
 //               ONE corner where the straights either side of them meet, which
 //               then has room for the smallest radius (stray: how far the
@@ -21,18 +39,6 @@
 //               from the point before to the point after, and the line refitted;
 //               repeated while any corner is tight and dropping keeps within the
 //               stray
-//   'optimize'  the whole line at once: split every R/3, then relaxed: each
-//               point turning tighter than an arc of the radius could moves
-//               toward its neighbours' midpoint, each point is pulled back toward
-//               where it was traced, never past the stray, and this repeated (a
-//               projected smoothing, as in position-based dynamics). Its line is
-//               many short arcs: simplified, the uneven spacing undid it
-//   'fourier'   low-passed in the frequency domain: wiggles shorter than a length
-//               scale L are taken out (fourierLine). Not held to the stray, nor
-//               to the bend: L is the control
-//   'pid'       STEERED at constant speed, the curvature capped at 1/R, aiming
-//               ahead on the traced line through a PID controller (steerLine):
-//               never tight by construction, only stray
 //
 // THE STRAY BUDGET HOLDS FOR THE ARCS TOO (fitArcs' maxDev): the smallest bend in
 // a sharp V sits far back from the tip (3 mm in a 15° V cuts 20 mm off it), so
@@ -49,7 +55,7 @@ const OPT_ITER = 400;
 
 /**
  * @param {[{pts, kind}]} runs  core/route.js
- * @param {{minRadius, tol, loops, joins?:'straight'|'dubins', fix?:'none'|'merge'|'remove'|'optimize'|'fourier'|'pid', maxStray?:number,
+ * @param {{minRadius, tol, loops, smoothing?:'pid'|'fourier'|'optimize'|'none', joins?:'straight'|'dubins', fix?:'none'|'merge'|'remove', maxStray?:number,
  *          fourierScale?:number, pid?:{look:number, p:number, i:number, d:number}}} o
  * @returns {{path, tight, loops, stray:{max, mean}}}
  */
@@ -65,13 +71,14 @@ export function fitLine(runs, o) {
   const fitted = pieces.map((p) => {
     let { pts: pp, kinds: kk } = p;
     if (pp.length < 4) return { path: { x0: pp[0], y0: pp[1], segs: [] }, h0: null, h1: null };
-    if (o.fix === 'pid') {
+    const sm = o.smoothing || 'none';
+    if (sm === 'pid') {
       const sim = steerLine(pp, kk, minR, o.pid || {});
       fit.steps += sim.steps;
       return sim;
     }
-    if (o.fix === 'fourier') ({ pts: pp, kinds: kk } = fourierLine(pp, kk, o.fourierScale || 10, minR));
-    if (minR > 0 && o.fix === 'optimize') ({ pts: pp, kinds: kk } = optimizeLine(pp, kk, minR, maxStray, o.tol));
+    if (sm === 'fourier') ({ pts: pp, kinds: kk } = fourierLine(pp, kk, o.fourierScale || 10, minR));
+    if (minR > 0 && sm === 'optimize') ({ pts: pp, kinds: kk } = optimizeLine(pp, kk, minR, maxStray, o.tol));
     // the stray budget holds for the arcs too: a bend that would cut a sharp V's tip
     // off by more than it is a tight corner, not a silent loss of the tip
     const arcOpts = { minRadius: minR, tol: o.tol, loops: o.loops, maxDev: minR > 0 ? maxStray : 0 };
@@ -102,9 +109,9 @@ export function fitLine(runs, o) {
       const sx = f.path.x0, sy = f.path.y0;
       const chord = Math.atan2(sy - end.y, sx - end.x);
       const dj = dubins(end.x, end.y, a.h1 ?? chord, sx, sy, f.h0 ?? chord, minR, 'join');
-      path.segs.push(...dj.segs);
+      for (const s of dj.segs) path.segs.push(s);
     }
-    path.segs.push(...f.path.segs);
+    for (const s of f.path.segs) path.segs.push(s);   // (not spread: a steered line can be too many for one call)
   });
   return { path, tight: tightPlaces(fit.tight, minR), loops: fit.loops, stray: measureStray(pts, kinds, path) };
 }
@@ -181,7 +188,7 @@ function rebuild(pts, kinds, idx, drop, put) {
     I.push(idx[i]);
   }
   idx.length = 0;
-  idx.push(...I);
+  for (const v of I) idx.push(v);
   return { pts: P, kinds: K };
 }
 
@@ -451,7 +458,7 @@ export function fourierLine(pts, kinds, lambda, R) {
  * is a position and a heading; each step of ds it turns at a curvature κ
  * (angular speed per unit length) and moves on, so each step is an arc of
  * radius 1/|κ| and the path is tangent everywhere by construction. κ is
- * capped at 1/R, so no bend is tighter than R: there are no tight corners, only
+ * capped at 1/R (at least look/4, for a pen), so no bend is tighter than R: there are no tight corners, only
  * stray. The controller aims at a point LOOK mm ahead on the traced line (from
  * its progress along it, which only moves forward, inside a window, so a
  * retraced run is not mistaken for the run beside it):
@@ -468,7 +475,9 @@ export function fourierLine(pts, kinds, lambda, R) {
  */
 export function steerLine(pts, kinds, R, g) {
   const look = Math.max(0.5, g.look ?? 6), P = g.p ?? 2, I = g.i ?? 0, D = g.d ?? 0.5;
-  const kMax = R > 0 ? 1 / R : Infinity;
+  // no bend (a pen) still turns no tighter than a quarter of the look ahead: uncapped,
+  // the controller swings at the scale of one step and chatters
+  const kMax = 1 / Math.max(R, look / 4);
   const ds = Math.max(0.1, Math.min(R > 0 ? R / 4 : 0.5, look / 8, 0.5));
   let L = 0;
   for (let i = 2; i < pts.length; i += 2) L += Math.hypot(pts[i] - pts[i - 2], pts[i + 1] - pts[i - 1]);

@@ -43,6 +43,9 @@ export function run() {
   const bad = parseProject({ app: 'EdgeDrawing', version: 1, settings: { widthMm: -3, join: 'zigzag', minRadius: 'x' } });
   check('project: unusable values fall back to defaults, each with a reason', bad.project.settings.widthMm === DEFAULTS.widthMm && bad.project.settings.join === DEFAULTS.join && bad.problems.length >= 3,
     bad.problems.join('; '));
+  const old = parseProject({ app: 'EdgeDrawing', version: 1, settings: { bendFix: 'fourier', fourierScale: 20 } });
+  check('project: a smoothing saved as a tight-corner fix comes back as the smoothing', old.project.settings.smoothing === 'fourier' && old.project.settings.bendFix === 'none' && old.project.settings.fourierScale === 20,
+    `${old.project.settings.smoothing}, ${old.project.settings.bendFix}`);
   let refused = false;
   try { parseProject({ app: 'PaintByNumbers', version: 1 }); } catch { refused = true; }
   check('project: another app\'s file is refused', refused, '');

@@ -95,11 +95,11 @@ export function runPipeline(rgba, settings, opts = {}) {
   });
 
   // D: straights and arcs
-  const keyD = [keyC, s.minRadius, s.simplify, s.loops, s.lineWidth, s.joinShape, s.bendFix, s.maxStray,
-    s.bendFix === 'fourier' ? s.fourierScale : null, s.bendFix === 'pid' ? [s.pidLook, s.pidP, s.pidI, s.pidD] : null];
+  const keyD = [keyC, s.minRadius, s.simplify, s.loops, s.lineWidth, s.smoothing, s.joinShape, s.bendFix, s.maxStray,
+    s.smoothing === 'fourier' ? s.fourierScale : null, s.smoothing === 'pid' ? [s.pidLook, s.pidP, s.pidI, s.pidD] : null];
   const D = stage('D', keyD, () => {
     progress('fitting arcs');
-    const fit = fitLine(C.runs, { minRadius: s.minRadius, tol: s.simplify, loops: s.loops, joins: s.joinShape, fix: s.bendFix, maxStray: s.maxStray,
+    const fit = fitLine(C.runs, { minRadius: s.minRadius, tol: s.simplify, loops: s.loops, smoothing: s.smoothing, joins: s.joinShape, fix: s.bendFix, maxStray: s.maxStray,
       fourierScale: s.fourierScale, pid: { look: s.pidLook, p: s.pidP, i: s.pidI, d: s.pidD } });
     progress('measuring');
     const st = pathStats(fit.path);

@@ -233,36 +233,48 @@ export function crossings(sampled, merge = 1) {
   const cell = Math.max(1, Math.min(20, (2 * total) / (m - 1)));
   const grid = new Map();
   const key = (gx, gy) => gx * 1000003 + gy;
+  const cellsOf = [];
   for (let i = 0; i < m - 1; i++) {
     const ax = p[2 * i], ay = p[2 * i + 1], bx = p[2 * i + 2], by = p[2 * i + 3];
+    const mine = [];
     for (let gx = Math.floor(Math.min(ax, bx) / cell); gx <= Math.floor(Math.max(ax, bx) / cell); gx++) {
       for (let gy = Math.floor(Math.min(ay, by) / cell); gy <= Math.floor(Math.max(ay, by) / cell); gy++) {
         const k = key(gx, gy);
         let a = grid.get(k);
         if (!a) grid.set(k, (a = []));
         a.push(i);
+        mine.push(k);
       }
     }
+    cellsOf.push(mine);
   }
+  // each segment against the later ones sharing a cell with it (a set per segment,
+  // not one of every pair: a dense line has more pairs than a Set can hold)
   const found = [];
-  const seen = new Set();
-  for (const list of grid.values()) {
-    for (let u = 0; u < list.length; u++) {
-      for (let v = u + 1; v < list.length; v++) {
-        let i = list[u], j = list[v];
-        if (i > j) [i, j] = [j, i];
-        if (j - i < 2) continue;
-        const pk = i * m + j;
-        if (seen.has(pk)) continue;
-        seen.add(pk);
-        const hit = properCross(p[2 * i], p[2 * i + 1], p[2 * i + 2], p[2 * i + 3], p[2 * j], p[2 * j + 1], p[2 * j + 2], p[2 * j + 3]);
-        if (hit) found.push(hit);
-      }
+  for (let i = 0; i < m - 1; i++) {
+    const cand = new Set();
+    for (const k of cellsOf[i]) for (const j of grid.get(k)) if (j > i + 1) cand.add(j);
+    for (const j of cand) {
+      const hit = properCross(p[2 * i], p[2 * i + 1], p[2 * i + 2], p[2 * i + 3], p[2 * j], p[2 * j + 1], p[2 * j + 2], p[2 * j + 3]);
+      if (hit) found.push(hit);
     }
   }
   found.sort((a, b) => a.x - b.x || a.y - b.y);
-  const out = [];
-  for (const f of found) if (!out.some((q) => Math.hypot(q.x - f.x, q.y - f.y) < merge)) out.push(f);
+  // crossings closer than `merge` are one: binned, so many crossings stay quick
+  const out = [], bins = new Map();
+  const mk = (x, y) => key(Math.floor(x / merge), Math.floor(y / merge));
+  for (const f of found) {
+    const bx = Math.floor(f.x / merge), by = Math.floor(f.y / merge);
+    let near = false;
+    for (let dx = -1; dx <= 1 && !near; dx++) for (let dy = -1; dy <= 1 && !near; dy++) {
+      for (const q of bins.get(key(bx + dx, by + dy)) || []) if (Math.hypot(q.x - f.x, q.y - f.y) < merge) { near = true; break; }
+    }
+    if (near) continue;
+    out.push(f);
+    const k = mk(f.x, f.y);
+    if (!bins.has(k)) bins.set(k, []);
+    bins.get(k).push(f);
+  }
   return out;
 }
 
