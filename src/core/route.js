@@ -47,7 +47,7 @@ export const TWO_OPT_BUDGET = 4e7;
 
 /**
  * @param {{nodes, edges}} graph
- * @param {{join:'euler'|'tsp', oddJoin:'retrace'|'new'|'shorter', start:{x,y}|null, closed:boolean}} o
+ * @param {{join:'euler'|'tsp', oddJoin:'retrace'|'new'|'shorter', start:{x,y}|null, closed:boolean, walk?:'step'|'pairs'}} o
  * @returns {{runs, start, end, stats}}
  */
 export function routeGraph(graph, o) {
@@ -156,7 +156,7 @@ function routeEuler(graph, o) {
   }
 
   // 3. the walk
-  const walk = hierholzer(nodes.length, edges, start);
+  const walk = o.walk === 'pairs' ? pairedWalk(nodes.length, edges, start) : hierholzer(nodes.length, edges, start);
   const runs = walk.map(({ e, rev }) => ({ pts: rev ? reverse(edges[e].pts) : edges[e].pts, kind: edges[e].kind }));
   const first = runs[0].pts, last = runs[runs.length - 1].pts;
   return {
@@ -493,6 +493,96 @@ export function hierholzer(n, edges, start) {
   }
   out.reverse();
   return out.slice(1).map(({ e, rev }) => ({ e, rev }));
+}
+
+
+/**
+ * The walk as STRAIGHTEST PAIRINGS (an alternative to Hierholzer's step-by-step
+ * choice, which takes the straightest way on from where it is, and can leave
+ * itself only sharp turns later). Each chain end at a node is a SLOT. At every
+ * node the slots are paired, straightest pairs first (the turn from arriving by
+ * one to leaving by the other), so every pass through a node is as straight as
+ * the node allows; at the two odd nodes one slot is left over, the line's start
+ * and end. Following the pairs splits the graph into an open trail and some
+ * closed circuits. They are SPLICED at nodes they share: two pairs (a, b) and
+ * (c, d) from different trails become (a, c)(b, d) or (a, d)(b, c), whichever
+ * adds less turning (either makes the two one trail). The graph is connected, so
+ * one pass over the nodes leaves one trail, walked from the start. (A spare
+ * slot, the start or end, splices too, so an open trail of one chain can.)
+ * @returns [{e, rev}] in drawing order
+ */
+export function pairedWalk(n, edges, start) {
+  const d0 = edges.map((e) => dirOf(e.pts, false)), d1 = edges.map((e) => dirOf(e.pts, true));
+  // slot 2e: the chain's a end, 2e+1 its b end; out: the way the chain leaves the node there
+  const nodeOf = (s) => ((s & 1) ? edges[s >> 1].b : edges[s >> 1].a);
+  const out = (s) => ((s & 1) ? [-d1[s >> 1][0], -d1[s >> 1][1]] : d0[s >> 1]);
+  const turn = (s, t) => { const a = out(s), b = out(t); return Math.acos(Math.max(-1, Math.min(1, -(a[0] * b[0] + a[1] * b[1])))); };
+  const at = Array.from({ length: n }, () => []);
+  for (let s = 0; s < 2 * edges.length; s++) at[nodeOf(s)].push(s);
+  const mate = new Int32Array(2 * edges.length).fill(-1);
+  for (let v = 0; v < n; v++) {
+    const S = at[v];
+    const cand = [];
+    for (let i = 0; i < S.length; i++) for (let j = i + 1; j < S.length; j++) cand.push([turn(S[i], S[j]), S[i], S[j]]);
+    cand.sort((p, q) => p[0] - q[0] || p[1] - q[1] || p[2] - q[2]);
+    for (const [, s, t] of cand) if (mate[s] < 0 && mate[t] < 0) { mate[s] = t; mate[t] = s; }
+  }
+  const parent = Int32Array.from({ length: 2 * edges.length }, (_, i) => i);
+  const find = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+  const unite = (a, b) => { a = find(a); b = find(b); if (a !== b) parent[b] = a; };
+  for (let e = 0; e < edges.length; e++) unite(2 * e, 2 * e + 1);
+  for (let s = 0; s < mate.length; s++) if (mate[s] >= 0) unite(s, mate[s]);
+  for (let v = 0; v < n; v++) {
+    for (;;) {
+      const pairs = at[v].filter((s) => mate[s] > s).map((s) => [s, mate[s]]);
+      let best = null;
+      for (let i = 0; i < pairs.length; i++) {
+        for (let j = i + 1; j < pairs.length; j++) {
+          const [a, b] = pairs[i], [c, d] = pairs[j];
+          if (find(a) === find(c)) continue;
+          const was = turn(a, b) + turn(c, d);
+          const x = turn(a, c) + turn(b, d) - was, y = turn(a, d) + turn(b, c) - was;
+          const cost = Math.min(x, y);
+          if (!best || cost < best.cost) best = { cost, a, b, c: x <= y ? c : d, d: x <= y ? d : c };
+        }
+      }
+      // a spare slot (the line's start or end) splices too: it takes one slot of
+      // another trail's pair as its mate, and the other becomes the spare
+      // (without this an open trail with no pairs, a single chain, could not take
+      // any circuit in)
+      for (const x of at[v].filter((s) => mate[s] < 0)) {
+        for (const [c, d] of pairs) {
+          if (find(x) === find(c)) continue;
+          const was = turn(c, d);
+          const xc = turn(x, c) - was, xd = turn(x, d) - was;
+          const cost = Math.min(xc, xd);
+          if (!best || cost < best.cost) best = { cost, spare: x, c: xc <= xd ? c : d, d: xc <= xd ? d : c };
+        }
+      }
+      if (!best) break;
+      if (best.spare !== undefined) {
+        const { spare, c, d } = best;
+        mate[spare] = c; mate[c] = spare; mate[d] = -1;
+        unite(spare, c);
+        continue;
+      }
+      const { a, b, c, d } = best;
+      mate[a] = c; mate[c] = a; mate[b] = d; mate[d] = b;
+      unite(a, c);
+    }
+  }
+  // walk: from the start's spare slot, or (all paired: a closed line) by opening one pair there
+  let s0 = at[start].find((s) => mate[s] < 0);
+  let stop = -1;
+  if (s0 === undefined) { s0 = at[start][0]; stop = mate[s0]; }
+  const walk = [];
+  for (let s = s0, guard = 0; guard <= edges.length; guard++) {
+    walk.push({ e: s >> 1, rev: (s & 1) === 1 });
+    const o = s ^ 1;
+    if (o === stop || mate[o] < 0) break;
+    s = mate[o];
+  }
+  return walk;
 }
 
 // ------------------------------------------------------------------ tsp

@@ -35,14 +35,17 @@ export function run() {
   check('...the line written once, shown through &lt;use&gt;', (html.match(/id="edl-line"/g) || []).length === 1 && (html.match(/href="#edl-line"/g) || []).length === pages - 1, '');
 
   // a project round trip, and bad input mended with reasons
-  const s = { ...DEFAULTS, widthMm: 250, join: 'tsp', oddJoin: 'new', start: { x: 10, y: 20 }, closed: true, medium: 'wire', loops: true, style: defaultStyle() };
+  const s = { ...DEFAULTS, widthMm: 250, join: 'tsp', oddJoin: 'new', start: { x: 10, y: 20 }, closed: true, pidD: 1.5, loops: true, style: defaultStyle() };
   const back = parseProject(projectJSON({ image: { kind: 'sample', name: 'rings' }, units: 'in', settings: s, display: { ink: '#123456', paper: '#ffffff' } }));
-  const same = ['widthMm', 'join', 'oddJoin', 'closed', 'medium', 'loops'].every((k) => back.project.settings[k] === s[k]) &&
+  const same = ['widthMm', 'join', 'oddJoin', 'closed', 'pidD', 'loops'].every((k) => back.project.settings[k] === s[k]) &&
     back.project.settings.start.x === 10 && back.project.units === 'in' && back.project.display.ink === '#123456';
   check('project: settings, start, units and colours survive a round trip', same && back.problems.length === 0, back.problems.join('; '));
-  const bad = parseProject({ app: 'EdgeDrawing', version: 1, settings: { widthMm: -3, join: 'zigzag', minRadius: 'x' } });
-  check('project: unusable values fall back to defaults, each with a reason', bad.project.settings.widthMm === DEFAULTS.widthMm && bad.project.settings.join === DEFAULTS.join && bad.problems.length >= 3,
+  const bad = parseProject({ app: 'EdgeDrawing', version: 1, settings: { widthMm: -3, join: 'zigzag', minRadius: 'x', pidD: 3 } });
+  check('project: unusable values fall back to defaults, each with a reason', bad.project.settings.widthMm === DEFAULTS.widthMm && bad.project.settings.join === DEFAULTS.join && bad.project.settings.pidD === DEFAULTS.pidD && bad.problems.length >= 4,
     bad.problems.join('; '));
+  const old = parseProject({ app: 'EdgeDrawing', version: 1, settings: { bendFix: 'fourier', fourierScale: 20 } });
+  check('project: a smoothing saved as a tight-corner fix comes back as the smoothing', old.project.settings.smoothing === 'fourier' && old.project.settings.bendFix === 'none' && old.project.settings.fourierScale === 20,
+    `${old.project.settings.smoothing}, ${old.project.settings.bendFix}`);
   let refused = false;
   try { parseProject({ app: 'PaintByNumbers', version: 1 }); } catch { refused = true; }
   check('project: another app\'s file is refused', refused, '');

@@ -26,16 +26,44 @@ or a length of wire can be bent to.
     find, jumping straight from the end of one to the start of the next.
   - *Start*: automatic (the loose end nearest the top-left corner) or picked on
     the preview. *End where it starts* closes the line.
-- **Line:** *Pen* or *Wire* sets the line width and the smallest bend radius
-  (0.5 mm and none; 1.2 mm and 3 mm). Every corner is rounded by an arc that
+- **Line:** *Line width* (1.2 mm wire by default) and the *Smallest bend*
+  radius (3 mm by default; 0 lets a pen turn on the spot). Every corner is rounded by an arc that
   passes within *Simplify* of it, and never tighter than the smallest bend; a
   corner that cannot get it is reported (the Problems view shows where), or with
   *Corner loops* on becomes a small loop round a circle of that radius. With a
   bend radius set, the edges are smoothed at two radii, since a line cannot bend
   round a smaller detail.
+- **Smoothing** of the whole line:
+  - *Steer it (PD)*, the default: the line is driven along the traced edges at
+    constant speed, aiming a *Look ahead* distance ahead, its steering a PID
+    controller (*P · D*, default 1 · 1, D at most 2; no integral term) on the heading error, its turning
+    never tighter than the smallest bend (for a pen, a quarter of the look
+    ahead). No corner can be tight; the line strays instead. A shorter look ahead
+    follows closer, a longer one is calmer and loopier.
+  - *Fourier smoothing*: wiggles shorter than a *Length scale* are taken out, the
+    same everywhere; the ends of each stroke stay put. It does not hold to the
+    bend: a longer scale leaves fewer tight places.
+  - *Relax the whole line*: every point bending tighter than the smallest bend
+    moves toward its neighbours, within *Stray at most* (needs a bend above 0).
+  - *None*: straights and arcs fitted to the traced line as it is.
+- **Experimental smoothing** (closed by default; with a bend above 0):
+  - *Joins: curves at the bend (Dubins)*: every join becomes the shortest path
+    that leaves a stroke the way it was going and meets the next stroke the way
+    that one goes, never tighter than the bend.
+  - *Through junctions: straightest pairing overall*: at every junction the
+    ways in and out are paired straightest first, and the pieces spliced into one
+    line, instead of choosing the straightest next step as it goes.
+  - *Tight corners* left after the fit (not with steering, which leaves none):
+    report them; *merge* a tight corner and its neighbours into one corner that
+    has room; or *cut their points out* one by one, within *Stray at most* (the
+    arcs too: a bend that would cut a sharp tip off by more is reported as tight
+    instead).
+  - *Edge smoothing: only where tighter than the bend*, instead of everywhere at
+    two radii.
 - **The line's figures:** length (how much draws the image's edges, goes over a
-  line again, or is not in the image), bends, the tightest bend, corners tighter
-  than the smallest bend, loops, crossings.
+  line again, or is not in the image), bends, the tightest bend, places tighter
+  than the smallest bend, loops, how far the line strays from the edges (at
+  most and on average), crossings.
 
 ## Run it
 

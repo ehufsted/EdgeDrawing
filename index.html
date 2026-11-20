@@ -327,19 +327,12 @@
     <details open>
       <summary>Line</summary>
       <div class="body">
-        <div class="row">
-          <label>Made with</label>
-          <div class="seg" id="mediumSeg">
-            <button data-medium="pen" aria-pressed="true">Pen</button>
-            <button data-medium="wire" aria-pressed="false">Wire</button>
-          </div>
-        </div>
-        <div class="row" title="the pen's line, or the wire's thickness">
+        <div class="row" title="the wire's thickness, or a pen's line">
           <label for="lineWidth">Line width</label>
           <input type="number" id="lineWidth" class="len" min="0" step="any">
           <span class="unit u"></span>
         </div>
-        <div class="row" title="no bend tighter than this radius: corners are rounded to at least it; 0 lets a pen turn on the spot">
+        <div class="row" title="no bend tighter than this radius: corners are rounded to at least it (wire cannot bend tighter than a few times its thickness)">
           <label for="minRadius">Smallest bend</label>
           <input type="number" id="minRadius" class="len" min="0" step="any">
           <span class="unit"><span class="u"></span> radius</span>
@@ -351,7 +344,84 @@
           <span class="unit">on</span>
           <input type="color" id="paper">
         </div>
-        <p class="note">Pen or Wire sets the width and the smallest bend (change them after if you like).</p>
+      </div>
+    </details>
+
+    <details open>
+      <summary>Smoothing</summary>
+      <div class="body">
+        <div class="row" title="how the whole line is smoothed before it is drawn as straights and arcs">
+          <label for="smoothing">Line smoothing</label>
+          <select id="smoothing">
+            <option value="pid">Steer it (PD)</option>
+            <option value="fourier">Fourier smoothing</option>
+            <option value="optimize">Relax the whole line</option>
+            <option value="none">None</option>
+          </select>
+        </div>
+        <div class="group" id="pidGroup">
+          <div class="row" title="how far ahead on the traced line the steering aims: longer is calmer and cuts more corners, shorter follows closer">
+            <label for="pidLook">Look ahead</label>
+            <input type="number" id="pidLook" class="len" min="0.5" step="any">
+            <span class="unit u"></span>
+          </div>
+          <div class="row" title="P: turn toward the aim (2 = pure pursuit) · D: damp the swing out of a turn, at most 2">
+            <label>Gains P · D</label>
+            <input type="number" id="pidP" min="0" step="0.1" style="width:56px">
+            <input type="number" id="pidD" min="0" max="2" step="0.1" style="width:56px">
+          </div>
+          <p class="note">The line drives along the traced edges at constant speed, aiming the look-ahead distance ahead, never turning tighter than the smallest bend: no corner can be tight, it strays instead.</p>
+        </div>
+        <div class="group" id="fourierGroup">
+          <div class="row" title="wiggles shorter than this are smoothed out (half of one this long is kept); longer is smoother and strays more">
+            <label for="fourierScale">Length scale</label>
+            <input type="number" id="fourierScale" class="len" min="0.1" step="any">
+            <span class="unit u"></span>
+          </div>
+          <p class="note">Takes out every wiggle shorter than the length scale, the same everywhere. It does not hold to the smallest bend: a longer scale leaves fewer tight places.</p>
+        </div>
+        <div class="row" id="strayRow" title="how far the line may move off the traced edges: relax, merge and cut keep within it, and no fitted arc passes farther than it from its corner">
+          <label for="maxStray">Stray at most</label>
+          <input type="number" id="maxStray" class="len" min="0" step="any">
+          <span class="unit u"></span>
+        </div>
+        <p class="note" id="relaxNote">Moves every point that bends tighter than the smallest bend toward its neighbours, within the stray. Needs a smallest bend above 0.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Experimental smoothing</summary>
+      <div class="body">
+        <div class="row" title="joins are not in the image, so they can take any shape: as Dubins paths they leave and meet the strokes tangentially, never tighter than the bend">
+          <label for="joinShape">Joins</label>
+          <select id="joinShape">
+            <option value="straight">Straight</option>
+            <option value="dubins">Curves at the bend (Dubins)</option>
+          </select>
+        </div>
+        <div class="row" id="walkRow" title="how the traced line goes through junctions">
+          <label for="walk">Through junctions</label>
+          <select id="walk">
+            <option value="step">Straightest next step</option>
+            <option value="pairs">Straightest pairing overall</option>
+          </select>
+        </div>
+        <div class="row" id="fixRow" title="after the line is fitted: what happens to a corner too tight for the bend (not with steering, which has none)">
+          <label for="bendFix">Tight corners</label>
+          <select id="bendFix">
+            <option value="none">Report them</option>
+            <option value="merge">Merge into one corner</option>
+            <option value="remove">Cut their points out</option>
+          </select>
+        </div>
+        <div class="row" title="with a bend, the traced edges are smoothed so the line can follow them">
+          <label for="bendSmooth">Edge smoothing</label>
+          <select id="bendSmooth">
+            <option value="uniform">Everywhere, at two radii</option>
+            <option value="tight">Only where tighter than the bend</option>
+          </select>
+        </div>
+        <p class="note">These act only with a smallest bend above 0; merge and cut keep within the stray above. The figures show how many places stay tight and how far the line strays from the edges.</p>
       </div>
     </details>
 

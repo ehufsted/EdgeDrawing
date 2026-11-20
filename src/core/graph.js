@@ -127,7 +127,8 @@ export function polyLength(p) {
  * The graph cleaned to the level of detail (see the header).
  * @param {{nodes, edges}} g     traceGraph's
  * @param {{minFeature:number, minLength:number, simplify:number, smooth?:number}} d  mm;
- *   smooth: the smoothing scale, when it should be more than the smallest feature
+ *   smooth: the smoothing scale, when it should be more than the smallest feature;
+ *   tight: instead of `smooth`, smooth only where a chain turns tighter than this radius (smoothTight)
  * @returns {{nodes, edges, stats}}
  */
 export function cleanGraph(g, d) {
@@ -195,7 +196,8 @@ export function cleanGraph(g, d) {
   edges = edges.filter((e) => keepComp[comp.of[e.a]]);
 
   // smoothed only now, so a chain joined through an old junction is smoothed across it
-  edges = edges.map((e) => ({ a: e.a, b: e.b, pts: rdp(smoothLine(e.pts, 0.4 * Math.max(d.minFeature, d.smooth || 0)), d.simplify) }));
+  const sm = (p) => (d.tight > 0 ? smoothTight(smoothLine(p, 0.4 * d.minFeature), d.tight) : smoothLine(p, 0.4 * Math.max(d.minFeature, d.smooth || 0)));
+  edges = edges.map((e) => ({ a: e.a, b: e.b, pts: rdp(sm(e.pts), d.simplify) }));
   return { ...compact(nodes, edges), stats };
 }
 
@@ -368,6 +370,56 @@ export function smoothLine(p, sigma) {
     out[2 * i] = X / W; out[2 * i + 1] = Y / W;
   }
   return out;
+}
+
+/**
+ * Smoothing only where a polyline turns tighter than radius R, the rest left as
+ * it is. At each point the circle through it and the points R/2 of arc either
+ * side estimates the curvature; where that circle is smaller than R, the
+ * point, and everything within R of it along the line, is blended toward a
+ * Gaussian-smoothed copy (fully at the tight point, fading to nothing R away).
+ * Repeated, the smoothing growing each round (R/2, R, 1.5R, ...), until no
+ * point is tight or after ROUNDS rounds. The ends stay where they are.
+ */
+export function smoothTight(p, R, ROUNDS = 6) {
+  let cur = p.slice();
+  const m = p.length / 2;
+  if (m < 3 || !(R > 0)) return cur;
+  for (let round = 1; round <= ROUNDS; round++) {
+    const s = new Float64Array(m);
+    for (let i = 1; i < m; i++) s[i] = s[i - 1] + Math.hypot(cur[2 * i] - cur[2 * i - 2], cur[2 * i + 1] - cur[2 * i - 1]);
+    const tight = [];
+    let lo = 0, hi = 0;
+    for (let i = 1; i < m - 1; i++) {
+      while (s[i] - s[lo] > R / 2 && lo < i - 1) lo++;
+      while (hi < m - 1 && s[hi] - s[i] < R / 2) hi++;
+      const j = Math.max(0, Math.min(lo, i - 1)), k = Math.max(hi, i + 1);
+      if (circumradius(cur[2 * j], cur[2 * j + 1], cur[2 * i], cur[2 * i + 1], cur[2 * k], cur[2 * k + 1]) < R) tight.push(i);
+    }
+    if (!tight.length) break;
+    // the blend weight: 1 at a tight point, falling linearly to 0 at R along the line
+    const w = new Float64Array(m);
+    let t = 0;
+    for (let i = 0; i < m; i++) {
+      while (t < tight.length - 1 && s[tight[t + 1]] <= s[i]) t++;
+      let dd = Math.abs(s[i] - s[tight[t]]);
+      if (t + 1 < tight.length) dd = Math.min(dd, Math.abs(s[tight[t + 1]] - s[i]));
+      w[i] = Math.max(0, 1 - dd / R);
+    }
+    const sm = smoothLine(cur, (round * R) / 2);
+    for (let i = 1; i < m - 1; i++) {
+      cur[2 * i] += w[i] * (sm[2 * i] - cur[2 * i]);
+      cur[2 * i + 1] += w[i] * (sm[2 * i + 1] - cur[2 * i + 1]);
+    }
+  }
+  return cur;
+}
+
+/** Radius of the circle through three points (Infinity when they are in line). */
+export function circumradius(ax, ay, bx, by, cx, cy) {
+  const a = Math.hypot(bx - cx, by - cy), b = Math.hypot(ax - cx, ay - cy), c = Math.hypot(ax - bx, ay - by);
+  const cross = Math.abs((bx - ax) * (cy - ay) - (by - ay) * (cx - ax));
+  return cross < 1e-12 ? Infinity : (a * b * c) / (2 * cross);
 }
 
 /** Douglas-Peucker on a flat polyline, the ends kept. */

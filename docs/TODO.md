@@ -20,13 +20,28 @@
 
 ## Better lines for wire
 
-- **Direction-aware joins.** Most tight corners in wire mode are at stroke ends
-  where the next run leaves at a sharp angle or turns straight back. Bridges
-  and odd-node pairing should cost the turn they force (no cost straight on,
-  most for a hairpin, scaled by the bend radius), not only their length.
+Tried on branch `curvature` (2026-11-19): Dubins joins, the paired walk, tight-only
+smoothing, merge / remove / optimize; see docs/architecture.md for the numbers.
+
+- **Direction-aware joins.** With Dubins joins, choose bridges, odd-node pairs
+  and the TSP order by Dubins length (the turn they force), not the straight
+  distance: the loops Dubins joins make where strokes face badly are the cost
+  of the best variant now.
 - **U-turns round a peg.** A reversal (a dead end that is retraced, or a hairpin
   join) as a half circle of the smallest radius, the way back offset by two
   radii, instead of a tight corner or a long teardrop loop.
+- **Fewer arcs from Fourier, optimize and PID.** Their lines are thousands of short
+  arcs; merge runs of nearly equal curvature (within a tolerance) into one arc,
+  for a bend table a person can follow.
+- **Steering that loses the line.** D is capped at 2 and the default bend is
+  3 mm, where D 2 holds the line (mean stray 3 to 4 mm). With the bend set to 0
+  (capped at look/4), D 2 lost the line on the Mona Lisa (78 mm mean stray): the
+  progress window cannot find it again. Detect that (far from the line for long)
+  and re-acquire.
+- **PID ripple.** A faint ripple on some steered strokes at 4×: tune the step
+  (now R/4, at most look/8 and 0.5 mm) against D, or low-pass the curvature.
+- **PID end of stroke.** Steer onto the exact end point and heading of each stroke
+  (or hand over to the Dubins join earlier), so no small S-bend is left there.
 - **Side-by-side retraces.** A retraced run offset by the wire's thickness from
   the run it repeats, so the template shows both wires.
 

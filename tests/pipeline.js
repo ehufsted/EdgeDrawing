@@ -10,7 +10,8 @@ import { polyLength } from '../src/core/graph.js';
 
 export function run() {
   section('pipeline', 'Prediction: on the sphere and rings samples the plan is one line, touching and tangent from end to end (G1), its arcs no tighter than the smallest radius except the corners it reports; the Eulerian line draws the edges once (its "edge" length within 3% of the graph\'s, arcs only cut corners); the same settings give the same plan; turning on corner loops re-uses the cached edges and route.');
-  const base = { widthMm: 200, precision: 'rough', minRadius: 2 };
+  // the checks of the fit itself, unsmoothed; the default steering has its own below
+  const base = { widthMm: 200, precision: 'rough', minRadius: 2, smoothing: 'none' };
   const sphere = generateSample('sphere').color;
   const cache = {};
   const p1 = runPipeline(sphere, base, { cache, imageKey: 1 });
@@ -45,6 +46,29 @@ export function run() {
   const near = Math.hypot(ps.start.x - startAt.x, ps.start.y - startAt.y);
   const any = Math.min(...ps.graph.nodes.filter((n) => n.deg % 2).map((n) => Math.hypot(n.x - startAt.x, n.y - startAt.y)));
   check('a start point: the line starts at least as near it as the nearest odd node', near <= any + 1e-3, `${num(near, 2)} mm away (nearest odd node of the edges ${num(any, 2)})`);
+  // every bend option: still one continuous line, tangent except at the tight corners it reports
+  const wire = { ...base, minRadius: 3, lineWidth: 1.2 };
+  const variants = [
+    { joinShape: 'dubins' }, { walk: 'pairs' }, { bendSmooth: 'tight' },
+    { bendFix: 'merge' }, { bendFix: 'remove' }, { smoothing: 'optimize' }, { smoothing: 'fourier' }, { smoothing: 'pid' }, { smoothing: 'pid', joinShape: 'dubins', walk: 'pairs' },
+    { joinShape: 'dubins', walk: 'pairs', bendSmooth: 'tight', bendFix: 'merge' },
+  ];
+  const plainW = runPipeline(rings, wire, {});
+  for (const v of variants) {
+    const p = runPipeline(rings, { ...wire, ...v }, {});
+    const c = continuity(p.path, 0.01);
+    check(`rings, wire, ${JSON.stringify(v).replace(/[{}"]/g, '')}: one continuous line, kinks only at reported tight corners`,
+      p.path.segs.length > 10 && c.gap < 1e-3 && c.kinks <= p.tight.length,
+      `${p.tight.length} tight (plain ${plainW.tight.length}), ${num(p.stats.length, 0)} mm (plain ${num(plainW.stats.length, 0)}), stray ${num(p.stats.strayMax, 2)} mm`);
+  }
+  // the defaults: steered, P 1, D 1, looking 4 mm ahead
+  const pd = runPipeline(rings, { widthMm: 200, precision: 'rough', minRadius: 3 }, {});
+  const pdc = continuity(pd.path, 0.01);
+  const pdr = pd.path.segs.filter((s) => s.k === 'A').map((s) => s.r);
+  check('defaults: the line is steered, one continuous tangent line, no arc under the 3 mm bend, nothing tight',
+    pd.path.segs.length > 10 && pdc.gap < 1e-3 && pdc.kinks === 0 && pdr.every((r) => r >= 3 - 1e-6) && pd.tight.length === 0,
+    `${num(pd.stats.length, 0)} mm, tightest ${num(Math.min(...pdr), 2)} mm, stray ${num(pd.stats.strayMax, 2)} / ${num(pd.stats.strayMean, 2)} mm`);
   const pc = runPipeline(rings, { ...base, closed: true }, {});
+let refusedNeg = '';  try { runPipeline(rings, { ...base, maxStray: -1 }, {}); } catch (e) { refusedNeg = e.message; }  check('a negative stray is refused, not used', refusedNeg === 'lengths cannot be negative', refusedNeg);
   check('closed: ends where it starts', Math.hypot(pc.start.x - pc.end.x, pc.start.y - pc.end.y) < 1e-6, '');
 }

@@ -11,7 +11,7 @@
 // is what the SVG and the printout carry. The line's colours are display only
 // and never re-run the worker; its width is drawn true to size.
 
-import { DEFAULTS, PRESETS, MEDIA, toMm, pieceGeometry, applyTone } from './core/units.js';
+import { DEFAULTS, PRESETS, PID_D_MAX, toMm, pieceGeometry, applyTone } from './core/units.js';
 import { normalizeHex } from './core/color.js';
 import { drawingSVG, downloadFile, arrowAt } from './core/svg.js';
 import { planHTML, PAPERS, pageWindows, printable, fmtLen, longText } from './core/printout.js';
@@ -23,7 +23,9 @@ import { generateSample } from './app/samples.js';
 const $ = (id) => document.getElementById(id);
 const STORE = 'edgedrawing.v1';
 
-const LEN_IDS = ['widthMm', 'heightMm', 'edgeScale', 'minFeature', 'minLength', 'simplify', 'lineWidth', 'minRadius'];
+const LEN_IDS = ['widthMm', 'heightMm', 'edgeScale', 'minFeature', 'minLength', 'simplify', 'lineWidth', 'minRadius', 'maxStray', 'fourierScale', 'pidLook'];
+const GAIN_IDS = ['pidP', 'pidD'];   // the steering's gains: plain numbers
+const BEND_IDS = ['smoothing', 'joinShape', 'walk', 'bendFix', 'bendSmooth'];   // the smoothing selects
 
 /** The Edges & detail presets, mm (edgeAmount a share). */
 const DETAIL = {
@@ -143,7 +145,9 @@ function validate(s) {
   if (!(s.widthMm > 0)) return 'enter a width';
   if (!(s.heightMm >= 0)) return 'height must be 0 (from the image) or more';
   if (!(s.edgeScale > 0)) return 'the edge scale must be more than 0';
-  if ([s.minFeature, s.minLength, s.simplify, s.lineWidth, s.minRadius].some((v) => !(v >= 0))) return 'lengths cannot be negative';
+  if ([s.minFeature, s.minLength, s.simplify, s.lineWidth, s.minRadius, s.maxStray].some((v) => !(v >= 0))) return 'lengths cannot be negative';
+  if (!(s.fourierScale > 0) || !(s.pidLook > 0)) return 'the length scale and the look ahead must be more than 0';
+  if (!(s.pidP >= 0) || !(s.pidD >= 0)) return 'the gains cannot be negative';
   return '';
 }
 
@@ -264,12 +268,15 @@ function updatePieceNote() {
 function showJoin() {
   for (const b of document.querySelectorAll('#joinSeg button')) b.setAttribute('aria-pressed', String(b.dataset.join === state.s.join));
   $('oddRow').hidden = state.s.join !== 'euler';
+  $('walkRow').hidden = state.s.join !== 'euler';
+  for (const id of BEND_IDS) $(id).value = state.s[id];
+  for (const id of GAIN_IDS) $(id).value = state.s[id];
+  showBendRows();
   $('oddJoin').value = state.s.oddJoin;
   $('closed').checked = state.s.closed;
 }
 
-function showMedium() {
-  for (const b of document.querySelectorAll('#mediumSeg button')) b.setAttribute('aria-pressed', String(b.dataset.medium === state.s.medium));
+function showLine() {
   $('loops').checked = state.s.loops;
 }
 
@@ -297,16 +304,29 @@ function bindLine() {
   $('startAuto').addEventListener('click', () => { setPicking(false); if (state.s.start) { state.s.start = null; scheduleRun(0); } renderStartNote(); });
   $('startPick').addEventListener('click', () => setPicking(!state.picking));
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.picking) setPicking(false); });
-  for (const b of document.querySelectorAll('#mediumSeg button')) {
-    b.addEventListener('click', () => {
-      state.s.medium = b.dataset.medium;
-      Object.assign(state.s, MEDIA[state.s.medium]);
-      showMedium();
-      showLengths();
-      scheduleRun(0);
-    });
-  }
   $('loops').addEventListener('change', () => { state.s.loops = $('loops').checked; scheduleRun(0); });
+  for (const id of BEND_IDS) $(id).addEventListener('change', () => { state.s[id] = $(id).value; showBendRows(); scheduleRun(0); });
+  for (const id of GAIN_IDS) {
+    $(id).addEventListener('input', () => {
+      const v = parseFloat($(id).value);
+      if (!(v >= 0)) return;
+      state.s[id] = id === 'pidD' ? Math.min(PID_D_MAX, v) : v;
+      scheduleRun();
+    });
+    // a D typed above the cap shows as the cap once the field is left
+    $(id).addEventListener('change', () => { $(id).value = state.s[id]; });
+  }
+}
+
+/** Each smoothing's own controls, shown only with it; the stray where something uses it. */
+function showBendRows() {
+  const sm = state.s.smoothing;
+  $('pidGroup').hidden = sm !== 'pid';
+  $('fourierGroup').hidden = sm !== 'fourier';
+  $('relaxNote').hidden = sm !== 'optimize';
+  $('fixRow').hidden = sm === 'pid';   // steering leaves no tight corner to fix
+  // the stray bounds every fitted arc too (fitArcs' maxDev), so it shows whenever the line is fitted
+  $('strayRow').hidden = sm === 'pid';
 }
 
 // ------------------------------------------------------------------- paint
@@ -566,7 +586,7 @@ function updateStats() {
   setStat('statBends', String(st.bends));
   setStat('statRetrace', pct(st.retrace, st.length), st.retrace / Math.max(1, st.length) > 0.25 ? 'warn' : '');
   setStat('statJoin', pct(st.join, st.length), st.join / Math.max(1, st.length) > 0.25 ? 'warn' : '');
-  setStat('statCross', String(st.crossings), state.s.medium === 'wire' && st.crossings ? 'warn' : '');
+  setStat('statCross', String(st.crossings), st.crossings ? 'warn' : '');
   setStat('statTight', String(st.tight), st.tight ? 'bad' : '');
   setStat('statPiece', `${fmtLen(plan.piece.W, state.units, 1)} × ${fmtLen(plan.piece.H, state.units, 1)} ${unitLabel()}`);
 }
@@ -583,8 +603,9 @@ function renderFigures() {
     row('not in the image', `${longText(st.join, U)} · ${pct(st.join, st.length)}`, KIND.join),
     row('Bends (arcs)', String(st.bends)),
     row('Tightest bend', st.bends ? `${L(st.minR, U === 'in' ? 3 : 1)} ${unitLabel()} radius` : '—'),
-    row('Tighter than the smallest bend', String(st.tight)),
+    row('Places tighter than the smallest bend', String(st.tight)),
     row('Corner loops', String(st.loops)),
+    row('Strays from the edges', `at most ${L(st.strayMax ?? 0, U === 'in' ? 3 : 1)}, on average ${L(st.strayMean ?? 0, U === 'in' ? 3 : 2)} ${unitLabel()}`),
     row('Crossings', String(st.crossings)),
     row('Edges found', `${st.chains} chains in ${st.components} ${st.components === 1 ? 'piece' : 'pieces'}`),
   ];
@@ -620,7 +641,7 @@ function bindExports() {
     const html = planHTML(plan, {
       paper: $('paperSize').value, units: state.units, title: `${state.imageName} — single-line drawing`,
       summary: $('pSummary').checked, fit: $('pFit').checked, template: $('pTemplate').checked,
-      previewURL: renderPNG(plan, 'drawing', 1400), lineWidth: state.s.lineWidth, medium: state.s.medium,
+      previewURL: renderPNG(plan, 'drawing', 1400), lineWidth: state.s.lineWidth, minRadius: state.s.minRadius,
     });
     const w = window.open('', '_blank');
     if (!w) { setStatus('the browser blocked the new window: allow pop-ups for this page', 'bad'); return; }
@@ -756,7 +777,7 @@ function applySettings(units, s, disp) {
   $('precision').value = s.precision;
   buildStyleUI();
   showJoin();
-  showMedium();
+  showLine();
   $('ink').value = disp.ink;
   $('paper').value = disp.paper;
   $('preset').value = state.preset;

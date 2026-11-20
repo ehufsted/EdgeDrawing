@@ -68,7 +68,7 @@ export const longText = (mm, units) => (units === 'in'
 /**
  * @param {object} plan
  * @param {{paper?:string, units?:'mm'|'in', summary?:boolean, fit?:boolean, template?:boolean,
- *          previewURL?:string, title?:string, lineWidth?:number, medium?:string}} opts
+ *          previewURL?:string, title?:string, lineWidth?:number, minRadius?:number}} opts
  */
 export function planHTML(plan, opts = {}) {
   const paper = PAPERS[opts.paper] || PAPERS.letter;
@@ -103,11 +103,9 @@ export function planHTML(plan, opts = {}) {
       row('Crossings', String(st.crossings)) +
       '</tbody></table>';
     const notes = plan.notes.length ? `<ul class="notes">${plan.notes.map((n) => `<li>${escapeXml(n)}</li>`).join('')}</ul>` : '';
-    const how = opts.medium === 'wire'
-      ? 'Lay the wire on the 1:1 template from the green ring, following the arrow, to the red square. Bend each arc round a peg or nail of its radius; where the line crosses itself the wire goes over.'
-      : 'Start at the green ring, follow the arrow, and do not lift the pen until the red square.';
+    const how = 'From the green ring, following the arrow, to the red square. In wire: lay it on the 1:1 template, bending each arc round a peg or nail of its radius; where the line crosses itself the wire goes over. With a pen: do not lift it.';
     page(title, `<h1>${escapeXml(title)}</h1>` +
-      `<p>Drawing <b>${L(W)} × ${L(H)} ${units}</b> · line ${fmt(lw, 2)} mm · ${opts.medium === 'wire' ? 'wire' : 'pen'}</p>` +
+      `<p>Drawing <b>${L(W)} × ${L(H)} ${units}</b> · line ${fmt(lw, 2)} mm · smallest bend ${fmt(opts.minRadius ?? 0, 2)} mm</p>` +
       `<div class="two">${prev}<div class="fig">${figures}<p class="small">${how}</p></div></div>${notes}`);
   }
   if (opts.fit) {

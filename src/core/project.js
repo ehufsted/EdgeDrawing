@@ -16,7 +16,7 @@
 // at all, or is from a newer version, is refused.
 
 import { normalizeHex } from './color.js';
-import { DEFAULTS, PRECISION, MEDIA } from './units.js';
+import { DEFAULTS, PRECISION, PID_D_MAX } from './units.js';
 import { normalizeStyle } from './style.js';
 
 export const PROJECT_VERSION = 1;
@@ -27,10 +27,14 @@ const NUMS = {
   widthMm: (x) => x > 0, heightMm: (x) => x >= 0, gamma: (x) => x > 0, brightness: (x) => x > 0,
   saturation: (x) => x >= 0, edgeScale: (x) => x > 0, edgeAmount: (x) => x > 0 && x <= 1,
   minFeature: (x) => x >= 0, minLength: (x) => x >= 0, simplify: (x) => x >= 0,
-  lineWidth: (x) => x >= 0, minRadius: (x) => x >= 0,
+  lineWidth: (x) => x >= 0, minRadius: (x) => x >= 0, maxStray: (x) => x >= 0,
+  fourierScale: (x) => x > 0, pidLook: (x) => x > 0, pidP: (x) => x >= 0, pidD: (x) => x >= 0 && x <= PID_D_MAX,
 };
 /** The settings that are one of a few words. */
-const ENUMS = { join: ['euler', 'tsp'], oddJoin: ['retrace', 'new', 'shorter'], medium: Object.keys(MEDIA) };
+const ENUMS = {
+  join: ['euler', 'tsp'], oddJoin: ['retrace', 'new', 'shorter'],
+  joinShape: ['straight', 'dubins'], walk: ['step', 'pairs'], smoothing: ['pid', 'fourier', 'optimize', 'none'], bendFix: ['none', 'merge', 'remove'], bendSmooth: ['uniform', 'tight'],
+};
 const BOOLS = ['closed', 'loops'];
 
 export const DISPLAY = { ink: '#1a1a1a', paper: '#ffffff' };
@@ -60,7 +64,9 @@ export function parseProject(json) {
   else if (im.kind === 'file' && typeof im.dataURL === 'string' && /^data:image\//.test(im.dataURL)) image = { kind: 'file', name: String(im.name || 'image'), dataURL: im.dataURL };
   else problems.push('no usable image in the project');
 
-  const src = o.settings && typeof o.settings === 'object' ? o.settings : {};
+  const src = o.settings && typeof o.settings === 'object' ? { ...o.settings } : {};
+  // saved while the line smoothings were tight-corner fixes: they are the smoothing now
+  if (['pid', 'fourier', 'optimize'].includes(src.bendFix) && src.smoothing === undefined) { src.smoothing = src.bendFix; src.bendFix = 'none'; }
   const settings = { ...DEFAULTS };
   for (const [k, ok] of Object.entries(NUMS)) {
     if (src[k] === undefined) continue;
