@@ -24,7 +24,7 @@ const $ = (id) => document.getElementById(id);
 const STORE = 'edgedrawing.v1';
 
 const LEN_IDS = ['widthMm', 'heightMm', 'edgeScale', 'minFeature', 'minLength', 'simplify', 'lineWidth', 'minRadius', 'maxStray', 'fourierScale', 'pidLook'];
-const GAIN_IDS = ['pidP', 'pidI', 'pidD'];   // the steering's gains: plain numbers
+const GAIN_IDS = ['pidP', 'pidD'];   // the steering's gains: plain numbers
 const BEND_IDS = ['smoothing', 'joinShape', 'walk', 'bendFix', 'bendSmooth'];   // the smoothing selects
 
 /** The Edges & detail presets, mm (edgeAmount a share). */

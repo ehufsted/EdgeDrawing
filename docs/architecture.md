@@ -166,3 +166,6 @@ saved with a smoothing under `bendFix` are read into `smoothing`.
   bins, so a dense line cannot exhaust memory.
 - Seen at 4× in pen mode: a faint ripple on some steered strokes; P, D or the
   step length could calm it.
+- The integral term was removed at the user's request (2026-11-19): the steering
+  is a PD controller, P 1 and D 1 by default. (The setting keeps its id 'pid',
+  so projects open unchanged; a saved I gain is ignored.)

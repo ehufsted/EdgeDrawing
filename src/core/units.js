@@ -84,7 +84,7 @@ export const DEFAULTS = {
   // smoothing the line (core/bends.js)
   smoothing: 'pid',      // the whole line: 'pid' (steered, never tighter than the bend) | 'fourier' | 'optimize' (relax) | 'none'
   pidLook: 4,            // mm, pid: how far ahead on the traced line the steering aims
-  pidP: 1, pidI: 0, pidD: 1,     // pid: the gains (P = 2 would be pure pursuit)
+  pidP: 1, pidD: 1,      // pid: the steering's gains, proportional and derivative (P = 2 would be pure pursuit)
   fourierScale: 12,      // mm, fourier: wiggles shorter than this are smoothed out (half of one this long kept)
   maxStray: 3,           // mm, how far relax (and merge or remove) may move the line off the traced edges
   // experimental (the Experimental smoothing tab)

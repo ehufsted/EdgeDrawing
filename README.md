@@ -34,9 +34,9 @@ or a length of wire can be bent to.
   bend radius set, the edges are smoothed at two radii, since a line cannot bend
   round a smaller detail.
 - **Smoothing** of the whole line:
-  - *Steer it (PID)*, the default: the line is driven along the traced edges at
+  - *Steer it (PD)*, the default: the line is driven along the traced edges at
     constant speed, aiming a *Look ahead* distance ahead, its steering a PID
-    controller (*P · I · D*, default 1 · 0 · 1) on the heading error, its turning
+    controller (*P · D*, default 1 · 1; no integral term) on the heading error, its turning
     never tighter than the smallest bend (for a pen, a quarter of the look
     ahead). No corner can be tight; the line strays instead. A shorter look ahead
     follows closer, a longer one is calmer and loopier.

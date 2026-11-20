@@ -6,7 +6,7 @@
 //
 // LINE SMOOTHING (smoothing), the whole line:
 //   'pid'       (the default) STEERED at constant speed, the curvature capped at
-//               1/R, aiming ahead on the traced line through a PID controller
+//               1/R, aiming ahead on the traced line through a PD controller
 //               (steerLine): never tight by construction, only stray
 //   'fourier'   low-passed in the frequency domain: wiggles shorter than a length
 //               scale L are taken out (fourierLine). Not held to the stray, nor
@@ -464,17 +464,19 @@ export function fourierLine(pts, kinds, lambda, R) {
  * retraced run is not mistaken for the run beside it):
  *
  *   e  = the heading error to that point (radians)
- *   κ  = (P·e + I·∫e ds / look + D·look·de/ds) / look,   capped at ±1/R
+ *   κ  = (P·e + D·look·de/ds) / look,   capped at ±1/R
  *
- * P = 2 is pure pursuit's geometry (the arc through the target point); I
- * removes a steady offset on long curves (held to ±look, against wind-up); D
- * damps the swing out of a turn. At a dead end the car cannot turn round on the
- * spot, so it loops at the radius and picks the line up again. It stops at the
- * end of the line (or once past it, getting no nearer).
+ * a PD controller (the id is still 'pid'). P = 2 is pure pursuit's geometry
+ * (the arc through the target point); D damps the swing out of a turn. There is
+ * no integral term: tried (I 0.3, with D raised to 1 in the same run), the
+ * stray moved by under 10%; it was taken out at the user's request. At a dead
+ * end the car cannot turn round on the spot, so it loops at the radius and picks
+ * the line up again. It stops at the end of the line (or once past it, getting
+ * no nearer).
  * @returns {{path, h0, h1, steps}}
  */
 export function steerLine(pts, kinds, R, g) {
-  const look = Math.max(0.5, g.look ?? 6), P = g.p ?? 2, I = g.i ?? 0, D = g.d ?? 0.5;
+  const look = Math.max(0.5, g.look ?? 4), P = g.p ?? 1, D = g.d ?? 1;
   // no bend (a pen) still turns no tighter than a quarter of the look ahead: uncapped,
   // the controller swings at the scale of one step and chatters
   const kMax = 1 / Math.max(R, look / 4);
@@ -490,7 +492,7 @@ export function steerLine(pts, kinds, R, g) {
   let h = Math.atan2(ref.y[1] - ref.y[0], ref.x[1] - ref.x[0]);
   const h0 = h;
   const segs = [];
-  let prog = 0, integ = 0, ePrev = null, lastD = Infinity, steps = 0, kPrev = NaN;
+  let prog = 0, ePrev = null, lastD = Infinity, steps = 0, kPrev = NaN;
   const maxSteps = Math.ceil((3 * L) / ds) + 4000;
   const wrap = (a) => a - 2 * Math.PI * Math.round(a / (2 * Math.PI));
   for (; steps < maxSteps; steps++) {
@@ -506,10 +508,9 @@ export function steerLine(pts, kinds, R, g) {
     lastD = prog >= n - 1 - ahead ? dEnd : Infinity;
     const t = Math.min(n - 1, prog + ahead);
     const e = wrap(Math.atan2(ref.y[t] - y, ref.x[t] - x) - h);
-    integ = Math.max(-look, Math.min(look, integ + e * ds));
     const de = ePrev === null ? 0 : wrap(e - ePrev) / ds;
     ePrev = e;
-    let k = (P * e + (I * integ) / look + D * look * de) / look;
+    let k = (P * e + D * look * de) / look;
     k = Math.max(-kMax, Math.min(kMax, k));
     const kind = ref.kinds[Math.min(ref.kinds.length - 1, prog)] || 'edge';
     // one step: a straight, or an arc of radius 1/|k| (merged into the last when the same)

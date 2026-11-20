@@ -61,7 +61,7 @@ export function run() {
       p.path.segs.length > 10 && c.gap < 1e-3 && c.kinks <= p.tight.length,
       `${p.tight.length} tight (plain ${plainW.tight.length}), ${num(p.stats.length, 0)} mm (plain ${num(plainW.stats.length, 0)}), stray ${num(p.stats.strayMax, 2)} mm`);
   }
-  // the defaults: steered, P 1, I 0, D 1, looking 4 mm ahead
+  // the defaults: steered, P 1, D 1, looking 4 mm ahead
   const pd = runPipeline(rings, { widthMm: 200, precision: 'rough', minRadius: 3 }, {});
   const pdc = continuity(pd.path, 0.01);
   const pdr = pd.path.segs.filter((s) => s.k === 'A').map((s) => s.r);
