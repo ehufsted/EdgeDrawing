@@ -87,7 +87,10 @@ export function parseProject(json) {
   const ns = normalizeStyle(src.style);
   settings.style = ns.style;
   problems.push(...ns.problems);
-  settings.precision = PRECISION[src.precision] ? src.precision : DEFAULTS.precision;
+  // Fine (2400 px) is gone: the nearest left is Normal; anything else unknown is noted
+  if (src.precision === 'fine') { settings.precision = 'normal'; problems.push('precision Fine is no longer offered: using Normal (1600 px)'); }
+  else if (src.precision === undefined || PRECISION[src.precision]) settings.precision = src.precision ?? DEFAULTS.precision;
+  else { settings.precision = DEFAULTS.precision; problems.push(`precision: unusable, using ${DEFAULTS.precision}`); }
 
   const d = o.display && typeof o.display === 'object' ? o.display : {};
   const pos = (v, def) => (isFinite(Number(v)) && Number(v) > 0 ? Number(v) : def);
