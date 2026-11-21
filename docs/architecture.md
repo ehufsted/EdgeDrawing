@@ -199,3 +199,8 @@ Asked for: fewer bends, distance ticks, numbered bends; tool-agnostic.
   the wire nor another label wins, else the one covering least. Dense drawings
   still crowd (about 300 bends on a 30 cm rhino at 2.5 mm labels): the bend
   table carries everything regardless.
+- 2026-11-21, the user's choices: distance ticks and bend numbers are separate
+  toggles (preview and Print / PDF); Fewer bends is off by default and lives in
+  the Experimental tab, as on a steered line it gave high-frequency waves (it
+  follows the steering's ripple) rather than broad curves. With it off, a
+  steered line is thousands of tiny arcs, so bend numbers there are dense.

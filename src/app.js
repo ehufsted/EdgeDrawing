@@ -485,7 +485,7 @@ function drawView(ctx, plan, view, k) {
   } else if (view === 'edges') drawEdges(ctx, plan, k);
   else if (view === 'source') drawSource(ctx, plan);
   else if (view === 'problems') { drawProblems(ctx, plan, k); drawMarkers(ctx, plan, k); }
-  if (state.disp.marks && view !== 'edges' && view !== 'source') drawMade(ctx, plan, k);
+  if ((state.disp.ticks || state.disp.bendNums) && view !== 'edges' && view !== 'source') drawMade(ctx, plan, k);
 }
 
 /** How many bends there are to make (cached on the plan). */
@@ -497,9 +497,10 @@ function bendCount(plan) {
 /** The making marks (core/marks.js), laid out once per plan and settings. */
 function madeLayout(plan, k) {
   const fs = Math.max(state.disp.markSize, 9 / k);   // readable on screen at any zoom
-  const key = `${state.disp.tickMm}|${fs.toFixed(3)}|${state.units}|${state.s.lineWidth}`;
+  const show = { ticks: state.disp.ticks, bends: state.disp.bendNums };
+  const key = `${state.disp.tickMm}|${fs.toFixed(3)}|${state.units}|${state.s.lineWidth}|${show.ticks}|${show.bends}`;
   if (!plan._made || plan._made.key !== key) {
-    Object.defineProperty(plan, '_made', { value: { key, layout: layoutMarks(plan.path, state.disp.tickMm, fs, state.s.lineWidth, state.units) }, enumerable: false, configurable: true, writable: true });
+    Object.defineProperty(plan, '_made', { value: { key, layout: layoutMarks(plan.path, state.disp.tickMm, fs, state.s.lineWidth, state.units, show) }, enumerable: false, configurable: true, writable: true });
   }
   return plan._made.layout;
 }
@@ -689,7 +690,7 @@ function bindExports() {
     if (state.plan) downloadFile(bendCSV(bendList(state.plan.path)), `${fileBase()}-bends.csv`, 'text/csv');
   });
   for (const id of ['paperSize', 'pSummary', 'pFit', 'pTemplate', 'pBends']) $(id).addEventListener('change', updatePrintNote);
-  $('pTemplate').addEventListener('change', () => { $('pMarks').disabled = !$('pTemplate').checked; });
+  $('pTemplate').addEventListener('change', () => { $('pTicks').disabled = $('pBendNums').disabled = !$('pTemplate').checked; });
   $('printClose').addEventListener('click', () => $('printDlg').close());
   $('printGo').addEventListener('click', () => {
     const plan = state.plan;
@@ -698,7 +699,7 @@ function bindExports() {
       paper: $('paperSize').value, units: state.units, title: `${state.imageName} — single-line drawing`,
       summary: $('pSummary').checked, fit: $('pFit').checked, template: $('pTemplate').checked,
       previewURL: renderPNG(plan, 'drawing', 1400), lineWidth: state.s.lineWidth, minRadius: state.s.minRadius,
-      marks: $('pMarks').checked, bendTable: $('pBends').checked, tickMm: state.disp.tickMm, markSize: state.disp.markSize,
+      ticks: $('pTicks').checked, bendNums: $('pBendNums').checked, bendTable: $('pBends').checked, tickMm: state.disp.tickMm, markSize: state.disp.markSize,
     });
     const w = window.open('', '_blank');
     if (!w) { setStatus('the browser blocked the new window: allow pop-ups for this page', 'bad'); return; }
@@ -837,7 +838,8 @@ function applySettings(units, s, disp) {
   showLine();
   $('ink').value = disp.ink;
   $('paper').value = disp.paper;
-  $('marks').checked = disp.marks;
+  $('ticks').checked = disp.ticks;
+  $('bendNums').checked = disp.bendNums;
   $('preset').value = state.preset;
   renderStartNote();
   save();
@@ -988,7 +990,7 @@ function bindDisplay() {
       paint();
     });
   }
-  $('marks').addEventListener('change', () => { state.disp.marks = $('marks').checked; save(); paint(); });
+  for (const id of ['ticks', 'bendNums']) $(id).addEventListener('change', () => { state.disp[id] = $(id).checked; save(); paint(); });
   for (const id of DISP_LEN_IDS) {
     $(id).addEventListener('input', () => {
       const v = toMm(parseFloat($(id).value), state.units);

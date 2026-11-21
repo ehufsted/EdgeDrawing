@@ -164,11 +164,13 @@ export function placeLabels(path, ticks, bends, fs, lw, units) {
 
 /**
  * Everything to lay out the marks once: the ticks, the bends and where each
- * label goes. Lengths in mm; fs is the label size, lw the line's width.
+ * label goes. Lengths in mm; fs is the label size, lw the line's width; show:
+ * which of the two kinds of mark to lay out.
  */
-export function layoutMarks(path, every, fs, lw = 1, units = 'mm') {
-  const ticks = tickMarks(path, every);
-  const bends = bendList(path);
+export function layoutMarks(path, every, fs, lw = 1, units = 'mm', show = { ticks: true, bends: true }) {
+  // only what is shown is laid out, so a hidden kind takes no room from the other
+  const ticks = show.ticks ? tickMarks(path, every) : [];
+  const bends = show.bends ? bendList(path) : [];
   const { tickSpots, spots } = placeLabels(path, ticks, bends, fs, lw, units);
   return { ticks, bends, spots, tickSpots, fs };
 }

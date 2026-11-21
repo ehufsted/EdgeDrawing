@@ -3,7 +3,7 @@
 //   { app: 'EdgeDrawing', version, savedAt,
 //     image: { kind: 'sample', name } | { kind: 'file', name, dataURL },
 //     units, settings: {...units.DEFAULTS, style (core/style.js)},
-//     display: {ink, paper, marks, tickMm, markSize} }
+//     display: {ink, paper, ticks, bendNums, tickMm, markSize} }
 //
 // THE PLAN IS NOT SAVED. It is deterministic (no randomness, and the 2-opt
 // works to a fixed budget, not a clock), so the same image and settings
@@ -37,8 +37,8 @@ const ENUMS = {
 };
 const BOOLS = ['closed', 'loops'];
 
-// marks: show the making marks (core/marks.js) on the preview; tickMm: their spacing; markSize: label size, mm
-export const DISPLAY = { ink: '#1a1a1a', paper: '#ffffff', marks: false, tickMm: 100, markSize: 2.5 };
+// ticks, bendNums: show the distance ticks, the numbered bends (core/marks.js) on the preview; tickMm: tick spacing; markSize: label size, mm
+export const DISPLAY = { ink: '#1a1a1a', paper: '#ffffff', ticks: false, bendNums: false, tickMm: 100, markSize: 2.5 };
 
 /** The project as JSON text. `p` is the shape above (savedAt is filled in). */
 export function projectJSON(p) {
@@ -92,7 +92,10 @@ export function parseProject(json) {
   const pos = (v, def) => (isFinite(Number(v)) && Number(v) > 0 ? Number(v) : def);
   const display = {
     ink: normalizeHex(d.ink) || DISPLAY.ink, paper: normalizeHex(d.paper) || DISPLAY.paper,
-    marks: typeof d.marks === 'boolean' ? d.marks : DISPLAY.marks, tickMm: pos(d.tickMm, DISPLAY.tickMm), markSize: pos(d.markSize, DISPLAY.markSize),
+    // one 'marks' switch, from before the two were separate, sets both
+    ticks: typeof d.ticks === 'boolean' ? d.ticks : typeof d.marks === 'boolean' ? d.marks : DISPLAY.ticks,
+    bendNums: typeof d.bendNums === 'boolean' ? d.bendNums : typeof d.marks === 'boolean' ? d.marks : DISPLAY.bendNums,
+    tickMm: pos(d.tickMm, DISPLAY.tickMm), markSize: pos(d.markSize, DISPLAY.markSize),
   };
   return { project: { image, units: o.units === 'in' ? 'in' : 'mm', settings, display }, problems };
 }

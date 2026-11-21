@@ -8,8 +8,8 @@
 //             green ring and arrow) and ends (a red square)
 //   template  the drawing at 1:1, split into a grid of pages that overlap by
 //             OVERLAP mm, each captioned with its place in the grid: to trace,
-//             or to lay wire on; with marks, the distance ticks and numbered bends
-//             (core/marks.js) on it
+//             or to lay wire on; with the distance ticks and the numbered bends
+//             (core/marks.js) on it, each on request
 //   bends     the bend table: every bend, where it starts along the line, its
 //             turn, radius and length
 //
@@ -22,7 +22,7 @@
 
 import { pathD, markersSVG, fmt, escapeXml } from './svg.js';
 import { fromMm } from './units.js';
-import { layoutMarks, marksSVG, bendText, alongText } from './marks.js';
+import { layoutMarks, marksSVG, bendText, alongText, bendList } from './marks.js';
 
 export const PAPERS = {
   letter: { w: 215.9, h: 279.4, label: 'Letter' },
@@ -73,8 +73,8 @@ export const longText = (mm, units) => (units === 'in'
  * @param {object} plan
  * @param {{paper?:string, units?:'mm'|'in', summary?:boolean, fit?:boolean, template?:boolean,
  *          previewURL?:string, title?:string, lineWidth?:number, minRadius?:number,
- *          marks?:boolean, bendTable?:boolean, tickMm?:number, markSize?:number}} opts
- *   marks: ticks and numbered bends on the 1:1 pages; bendTable: the bend table pages
+ *          ticks?:boolean, bendNums?:boolean, bendTable?:boolean, tickMm?:number, markSize?:number}} opts
+ *   ticks: distance ticks on the 1:1 pages; bendNums: the bends numbered there; bendTable: the bend table pages
  */
 export function planHTML(plan, opts = {}) {
   const paper = PAPERS[opts.paper] || PAPERS.letter;
@@ -89,10 +89,12 @@ export function planHTML(plan, opts = {}) {
   const page = (caption, body) => pages.push(
     `<section class="page"><div class="cap">${escapeXml(caption)}</div><div class="body">${body}</div></section>`);
   // the making marks (core/marks.js): ticks and numbered bends, on the 1:1 pages
-  const made = opts.marks || opts.bendTable ? layoutMarks(plan.path, opts.tickMm || 100, opts.markSize || 2.5, lw, units) : null;
+  const onPage = !!(opts.ticks || opts.bendNums);
+  const made = onPage ? layoutMarks(plan.path, opts.tickMm || 100, opts.markSize || 2.5, lw, units, { ticks: !!opts.ticks, bends: !!opts.bendNums }) : null;
+  const table = opts.bendTable ? bendList(plan.path) : null;
   const view = (x0, y0, w, h, k, css, withMarks = false) =>
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(x0)} ${fmt(y0)} ${fmt(w)} ${fmt(h)}" style="--edl-lw:${fmt(Math.max(lw, MIN_LINE / k))};${css}">` +
-    `<use href="#edl-line"/><use href="#edl-marks"/>${withMarks && made && opts.marks ? '<use href="#edl-made"/>' : ''}</svg>`;
+    `<use href="#edl-line"/><use href="#edl-marks"/>${withMarks && made ? '<use href="#edl-made"/>' : ''}</svg>`;
   const bar = '<svg class="bar" width="70mm" height="6mm" viewBox="0 0 70 6"><path d="M0 3h50M0 1v4M50 1v4" stroke="#000" stroke-width="0.3" fill="none"/>' +
     '<text x="52" y="4.2" font-size="3" font-family="Arial, Helvetica, sans-serif">50 mm</text></svg>';
 
@@ -128,14 +130,14 @@ export function planHTML(plan, opts = {}) {
       page(`${title} · template at 1:1${where} · top ↑`, view(wd.x0, wd.y0, w, h, 1, `width:${fmt(w)}mm;height:${fmt(h)}mm;outline:0.2mm dashed #bbb`, true) + bar);
     }
   }
-  if (opts.bendTable && made) {
+  if (table) {
     // the bend table: every bend in order, where it starts along the line (the
     // total, as the ticks), its turn, radius and length
     const per = Math.max(10, Math.floor((room.h - 14) / 5.2));
     const head = '<tr><th class="r">Bend</th><th class="r">Starts at</th><th>Turn</th><th class="r">Radius</th><th class="r">Arc length</th></tr>';
-    const total = made.bends.length;
+    const total = table.length;
     for (let p0 = 0; p0 < Math.max(1, total); p0 += per) {
-      const rows = made.bends.slice(p0, p0 + per).map((b) => `<tr><td class="r n">${b.n}</td><td class="r">${escapeXml(alongText(b.at, units))}</td>` +
+      const rows = table.slice(p0, p0 + per).map((b) => `<tr><td class="r n">${b.n}</td><td class="r">${escapeXml(alongText(b.at, units))}</td>` +
         `<td>${escapeXml(bendText(b))}</td><td class="r">${L(b.r, units === 'in' ? 3 : 1)} ${units}</td><td class="r">${L(b.len, units === 'in' ? 2 : 0)} ${units}</td></tr>`).join('');
       const intro = p0 === 0 ? `<p class="small">${total} bends, in drawing order from the green ring. R turns clockwise and L anticlockwise as the line runs, seen on the page. "Starts at" is the length of line before the bend, as the ticks on the template count it: mark the wire there before bending.</p>` : '';
       page(`${title} · bend table${total > per ? ` · ${Math.floor(p0 / per) + 1} of ${Math.ceil(total / per)}` : ''}`, `${intro}<table class="key bends">${head}<tbody>${rows}</tbody></table>`);
@@ -164,7 +166,7 @@ table.bends td { padding: 0.5mm 1mm; font-variant-numeric: tabular-nums; } .n { 
 <svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute"><defs>` +
 `<g id="edl-line"><path d="${pathD(plan.path)}" fill="none" stroke="#000" style="stroke-width:var(--edl-lw)" stroke-linecap="round" stroke-linejoin="round"/></g>` +
 `<g id="edl-marks">${markersSVG(plan, Math.max(3, Math.min(W, H) / 60))}</g>` +
-`${made && opts.marks ? `<g id="edl-made">${marksSVG(made, units, lw)}</g>` : ''}</defs></svg>
+`${made ? `<g id="edl-made">${marksSVG(made, units, lw)}</g>` : ''}</defs></svg>
 ${pages.join('\n')}
 </body></html>`;
 }

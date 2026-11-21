@@ -83,12 +83,12 @@ export const DEFAULTS = {
   pidP: 1, pidD: 1,      // pid: the steering's gains, proportional and derivative (P = 2 would be pure pursuit); D at most PID_D_MAX
   fourierScale: 12,      // mm, fourier: wiggles shorter than this are smoothed out (half of one this long kept)
   maxStray: 3,           // mm, how far relax (and merge or remove) may move the line off the traced edges
-  bendTol: 0.5,          // mm: the finished line refitted as the fewest arcs within this of it (core/refit.js); 0 = as fitted
   // experimental (the Experimental smoothing tab)
   joinShape: 'straight', // 'straight' | 'dubins': joins as the shortest paths no tighter than the bend
   walk: 'step',          // euler: 'step' (straightest way on, step by step) | 'pairs' (straightest pairing at every node)
   bendFix: 'none',       // tight corners after the fit: 'none' (reported) | 'merge' | 'remove' (not with pid)
   bendSmooth: 'uniform', // with a bend: 'uniform' (smoothed at two radii) | 'tight' (only where tighter than the bend)
+  bendTol: 0,            // mm: the finished line refitted as the fewest arcs within this of it (core/refit.js); 0 = off
 };
 
 /**

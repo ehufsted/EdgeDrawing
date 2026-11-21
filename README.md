@@ -46,10 +46,6 @@ or a length of wire can be bent to.
   - *Relax the whole line*: every point bending tighter than the smallest bend
     moves toward its neighbours, within *Stray at most* (needs a bend above 0).
   - *None*: straights and arcs fitted to the traced line as it is.
-  - *Fewer bends, within* (0.5 mm by default): the finished line is refitted
-    as the fewest arcs that stay within this of it, none tighter than the
-    smallest bend. On the samples that is about a tenth of the bends (the rhino
-    at Coarse: 2,896 to 313). 0 keeps the line as fitted.
 - **Experimental smoothing** (closed by default; with a bend above 0):
   - *Joins: curves at the bend (Dubins)*: every join becomes the shortest path
     that leaves a stroke the way it was going and meets the next stroke the way
@@ -64,11 +60,14 @@ or a length of wire can be bent to.
     instead).
   - *Edge smoothing: only where tighter than the bend*, instead of everywhere at
     two radii.
-- **Making it by hand** (tool-agnostic): *Show distance ticks and bend
-  numbers* marks the line every *Ticks every* (10 cm by default) with the
-  TOTAL length so far, never the length since the last tick, so a slip at one
-  bend does not shift the numbers after it; and numbers each bend in drawing
-  order with its turn (R clockwise or L anticlockwise as the line runs, seen on
+  - *Fewer bends, within* (off by default): the finished line is refitted as the
+    fewest arcs that stay within this of it, none tighter than the smallest
+    bend: about a tenth of the bends, but a steered line comes out wavy (it
+    follows the steering's ripple) rather than in broad curves.
+- **Making it by hand** (tool-agnostic): *Show distance ticks* marks the line
+  every *Ticks every* (10 cm by default) with the TOTAL length so far, never the
+  length since the last tick, so a slip at one bend does not shift the numbers
+  after it. *Show bend numbers* numbers each bend in drawing order with its turn (R clockwise or L anticlockwise as the line runs, seen on
   the page, and its angle), a bar across the line where it starts. Labels are
   placed clear of the line and of each other where there is room.
 - **The line's figures:** length (how much draws the image's edges, goes over a
@@ -108,7 +107,7 @@ is the resolution the edges are found at: 700 to 2400 px on the long side.
 
 | Button | What |
 | --- | --- |
-| Print / PDF… | The figures with a preview and how to draw it; the whole drawing on one page; the drawing at 1:1 split across pages that overlap by 10 mm, with the start and end marked, a 50 mm bar to check the scale, and (ticked by default) the distance ticks and numbered bends; the bend table (each bend: where it starts along the line, its turn, radius and arc length). Print at 100%. |
+| Print / PDF… | The figures with a preview and how to draw it; the whole drawing on one page; the drawing at 1:1 split across pages that overlap by 10 mm, with the start and end marked, a 50 mm bar to check the scale, and (each ticked by default) the distance ticks and the numbered bends; the bend table (each bend: where it starts along the line, its turn, radius and arc length). Print at 100%. |
 | Bend table CSV | The same table, one row per bend. |
 | Drawing SVG | The line at true size, as ONE path of straights (L) and arcs (A), stroked at the line width: for a plotter, or to import. |
 | PNG | The current view. |

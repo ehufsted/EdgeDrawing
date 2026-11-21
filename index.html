@@ -386,11 +386,6 @@
           <span class="unit u"></span>
         </div>
         <p class="note" id="relaxNote">Moves every point that bends tighter than the smallest bend toward its neighbours, within the stray. Needs a smallest bend above 0.</p>
-        <div class="row" title="the finished line refitted as the fewest arcs that stay within this of it, none tighter than the smallest bend: far fewer bends to make; 0 keeps it as fitted">
-          <label for="bendTol">Fewer bends, within</label>
-          <input type="number" id="bendTol" class="len" min="0" step="any">
-          <span class="unit u"></span>
-        </div>
       </div>
     </details>
 
@@ -426,7 +421,12 @@
             <option value="tight">Only where tighter than the bend</option>
           </select>
         </div>
-        <p class="note">These act only with a smallest bend above 0; merge and cut keep within the stray above. The figures show how many places stay tight and how far the line strays from the edges.</p>
+        <div class="row" title="the finished line refitted as the fewest arcs that stay within this of it, none tighter than the smallest bend: far fewer bends, though steered lines tend to come out wavy; 0 = off">
+          <label for="bendTol">Fewer bends, within</label>
+          <input type="number" id="bendTol" class="len" min="0" step="any">
+          <span class="unit u"></span>
+        </div>
+        <p class="note">These act only with a smallest bend above 0 (Fewer bends works without one); merge and cut keep within the stray above. The figures show how many places stay tight and how far the line strays from the edges.</p>
       </div>
     </details>
 
@@ -434,7 +434,8 @@
       <summary>The line &amp; output</summary>
       <div class="body">
         <table class="figs" id="figs"></table>
-        <label class="check" title="on the preview: a bar across the line every tick spacing with the total length so far, and each bend numbered with its turn, a bar where it starts"><input type="checkbox" id="marks"> Show distance ticks and bend numbers</label>
+        <label class="check" title="on the preview: a bar across the line every tick spacing, with the total length so far"><input type="checkbox" id="ticks"> Show distance ticks</label>
+        <label class="check" title="on the preview: each bend numbered in drawing order with its turn (R or L, degrees), a bar where it starts"><input type="checkbox" id="bendNums"> Show bend numbers</label>
         <div class="row">
           <label for="tickMm">Ticks every</label>
           <input type="number" id="tickMm" class="len" min="1" step="any">
@@ -501,7 +502,8 @@
   <label class="check"><input type="checkbox" id="pSummary" checked> Figures and preview</label>
   <label class="check"><input type="checkbox" id="pFit" checked> Whole drawing, scaled to one page</label>
   <label class="check"><input type="checkbox" id="pTemplate" checked> Template at 1:1 (split across pages if needed)</label>
-  <label class="check" style="margin-left:22px"><input type="checkbox" id="pMarks" checked> With distance ticks and bend numbers</label>
+  <label class="check" style="margin-left:22px"><input type="checkbox" id="pTicks" checked> With distance ticks</label>
+  <label class="check" style="margin-left:22px"><input type="checkbox" id="pBendNums" checked> With bend numbers</label>
   <label class="check"><input type="checkbox" id="pBends" checked> Bend table</label>
   <p class="note" id="printNote"></p>
   <div class="buttons"><button class="primary" id="printGo">Open printable page</button><button id="printClose">Cancel</button></div>

@@ -38,13 +38,19 @@ export function run() {
   const zig = [0, 0];
   for (let i = 1; i <= 51; i++) zig.push(10 * i, i % 2 ? 6 : 0);
   const zplan = { ...bigPlan, path: fitArcs(zig, Array(51).fill('edge'), { minRadius: 2, tol: 0.3 }).path, stats: { ...bigPlan.stats, length: 400 } };
-  const zhtml = planHTML(zplan, { paper: 'letter', summary: false, fit: false, marks: true, bendTable: true, tickMm: 50 });
+  const zhtml = planHTML(zplan, { paper: 'letter', summary: false, fit: false, ticks: true, bendNums: true, bendTable: true, tickMm: 50 });
   const zpages = (zhtml.match(/<section class="page">/g) || []).length;
   const tpages = pageWindows(400, 300, printable(PAPERS.letter).w, printable(PAPERS.letter).h).windows.length;
   check('printout with marks: the marks drawn once, on every 1:1 page', (zhtml.match(/id="edl-made"/g) || []).length === 1 && (zhtml.match(/href="#edl-made"/g) || []).length === tpages, '');
   check('...and a bend table of 50 rows over its pages', (zhtml.match(/<td class="r n">/g) || []).length === 50 && zpages === tpages + Math.ceil(50 / Math.max(10, Math.floor((printable(PAPERS.letter).h - 14) / 5.2))),
     `${zpages} pages (${tpages} template)`);
   check('...without marks asked for, none', !planHTML(zplan, { paper: 'letter' }).includes('edl-made'), '');
+  const onlyTicks = planHTML(zplan, { paper: 'letter', summary: false, fit: false, ticks: true, tickMm: 50 });
+  const onlyBends = planHTML(zplan, { paper: 'letter', summary: false, fit: false, bendNums: true, tickMm: 50 });
+  check('...ticks alone: the tick labels, no bend numbers; bend numbers alone: no tick labels', /\d+ cm<\/text>/.test(onlyTicks) && !/font-weight="bold">\d+</.test(onlyTicks) &&
+    /font-weight="bold">\d+</.test(onlyBends) && !/\d+ cm<\/text>/.test(onlyBends), '');
+  const oldMarks = parseProject({ app: 'EdgeDrawing', version: 1, display: { marks: true } }).project.display;
+  check('project: an old single marks switch turns on both', oldMarks.ticks === true && oldMarks.bendNums === true, JSON.stringify(oldMarks));
 
   // a project round trip, and bad input mended with reasons
   const s = { ...DEFAULTS, widthMm: 250, join: 'tsp', oddJoin: 'new', start: { x: 10, y: 20 }, closed: true, pidD: 1.5, loops: true, style: defaultStyle() };
