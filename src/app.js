@@ -54,6 +54,8 @@ const state = {
   s: freshSettings(),   // the pipeline's settings, mm
   disp: { ...DISPLAY },
   view: 'drawing',
+  tab: 'picture',       // the sidebar's tab: 'picture' | 'line' | 'make'
+  showExp: false,       // the Experimental smoothing section shown
   plan: null,
   picking: false,       // the next click on the preview sets the start
   anim: { t: 1, playing: false, raf: 0, last: 0 },
@@ -68,7 +70,7 @@ window.edgeDrawing = state;   // for driving the app from DevTools / the CDP har
 function save() {
   try {
     // the start point belongs to one image, so it is not kept here (a project keeps it)
-    localStorage.setItem(STORE, JSON.stringify({ units: state.units, preset: state.preset, s: { ...state.s, start: null }, disp: state.disp }));
+    localStorage.setItem(STORE, JSON.stringify({ units: state.units, preset: state.preset, s: { ...state.s, start: null }, disp: state.disp, tab: state.tab, showExp: state.showExp }));
   } catch { /* storage unavailable */ }
 }
 
@@ -82,6 +84,8 @@ function restore() {
     state.s = project.settings;
     state.disp = project.display;
     if (o.preset === 'custom' || PRESETS.some((p) => p.id === o.preset)) state.preset = o.preset;
+    if (TABS.includes(o.tab)) state.tab = o.tab;
+    state.showExp = o.showExp === true;
   } catch { /* keep defaults */ }
 }
 
@@ -206,6 +210,7 @@ function bindLengths() {
       if (id === 'widthMm' || id === 'heightMm') { state.preset = 'custom'; $('preset').value = 'custom'; }
       showDetailPreset();
       if (id === 'lineWidth') paint();
+      if (id === 'bendTol') showSections();   // the note on experiments in use
       scheduleRun();   // the line width too: it sets how close two crossings count as one
     });
   }
@@ -275,6 +280,7 @@ function showJoin() {
   for (const id of BEND_IDS) $(id).value = state.s[id];
   for (const id of GAIN_IDS) $(id).value = state.s[id];
   showBendRows();
+  showSections();
   $('oddJoin').value = state.s.oddJoin;
   $('closed').checked = state.s.closed;
 }
@@ -308,7 +314,7 @@ function bindLine() {
   $('startPick').addEventListener('click', () => setPicking(!state.picking));
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.picking) setPicking(false); });
   $('loops').addEventListener('change', () => { state.s.loops = $('loops').checked; scheduleRun(0); });
-  for (const id of BEND_IDS) $(id).addEventListener('change', () => { state.s[id] = $(id).value; showBendRows(); scheduleRun(0); });
+  for (const id of BEND_IDS) $(id).addEventListener('change', () => { state.s[id] = $(id).value; showBendRows(); showSections(); scheduleRun(0); });
   for (const id of GAIN_IDS) {
     $(id).addEventListener('input', () => {
       const v = parseFloat($(id).value);
@@ -321,9 +327,42 @@ function bindLine() {
   }
 }
 
+// ------------------------------------------------------------------ tabs
+const TABS = ['picture', 'line', 'make'];
+
+/** Which experimental settings are away from their defaults, by name (they act even while hidden). */
+function experimentsInUse() {
+  const s = state.s, on = [];
+  if (s.joinShape !== DEFAULTS.joinShape) on.push('Dubins joins');
+  if (s.walk !== DEFAULTS.walk && s.join === 'euler') on.push('straightest pairing');
+  if (s.bendFix !== DEFAULTS.bendFix && s.smoothing !== 'pid') on.push(s.bendFix === 'merge' ? 'merge tight corners' : 'cut tight corners');
+  if (s.bendSmooth !== DEFAULTS.bendSmooth) on.push('edge smoothing only where tight');
+  if (s.bendTol > 0) on.push('fewer bends');
+  return on;
+}
+
+/** Only the sections of the tab in use; the experiments only when asked for, with a note when they act unseen. */
+function showSections() {
+  for (const b of document.querySelectorAll('#sideTabs button')) b.setAttribute('aria-pressed', String(b.dataset.tab === state.tab));
+  for (const d of document.querySelectorAll('aside details[data-tab]')) d.hidden = d.dataset.tab !== state.tab || (d.id === 'expDetails' && !state.showExp);
+  $('showExp').checked = state.showExp;
+  const on = experimentsInUse();
+  $('expNote').hidden = state.showExp || !on.length || state.tab !== 'line';
+  $('expNote').textContent = on.length ? `Experiments in use, though hidden: ${on.join(', ')}. Tick Show experiments to see them.` : '';
+}
+
+function bindTabs() {
+  for (const b of document.querySelectorAll('#sideTabs button')) {
+    b.addEventListener('click', () => { state.tab = b.dataset.tab; showSections(); save(); $('sideTabs').scrollIntoView({ block: 'nearest' }); });
+  }
+  $('showExp').addEventListener('change', () => { state.showExp = $('showExp').checked; if (state.showExp) state.tab = 'line'; showSections(); save(); });
+}
+
 /** Each smoothing's own controls, shown only with it; the stray where something uses it. */
 function showBendRows() {
   const sm = state.s.smoothing;
+  // steering is never tighter than the bend: no corner to loop round
+  $('loops').closest('label').hidden = sm === 'pid';
   $('pidGroup').hidden = sm !== 'pid';
   $('fourierGroup').hidden = sm !== 'fourier';
   $('relaxNote').hidden = sm !== 'optimize';
@@ -1018,6 +1057,7 @@ function init() {
   bindTone();
   bindDisplay();
   bindViews();
+  bindTabs();
   bindAnim();
   bindCanvas();
   bindExports();

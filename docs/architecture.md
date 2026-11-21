@@ -204,3 +204,9 @@ Asked for: fewer bends, distance ticks, numbered bends; tool-agnostic.
   the Experimental tab, as on a steered line it gave high-frequency waves (it
   follows the steering's ripple) rather than broad curves. With it off, a
   steered line is thousands of tiny arcs, so bend numbers there are dense.
+- 2026-11-21, UI: the sidebar is three tabs, Picture (image, tone, style,
+  canvas, edges & detail), Line (one line, line, smoothing) and Make (figures,
+  marks, output); the Experimental smoothing section shows only with the
+  header's Show experiments switch, and while hidden, any experiment away from
+  its default is named in a note on the Line tab (they still act). Corner loops
+  shows only when the line is not steered (steering is never tight).

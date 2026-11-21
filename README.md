@@ -86,6 +86,14 @@ powershell -ExecutionPolicy Bypass -File serve.ps1
 then open <http://localhost:8080/>. (Any static server works; the page only has to
 be served over HTTP, not opened as a file.)
 
+## Layout
+
+The sidebar has three tabs: **Picture** (image, tone, style, canvas, edges &
+detail), **Line** (joining, line width and bend, smoothing) and **Make** (the
+line's figures, marks for making it, printout and files). The experimental
+settings show only with **Show experiments** in the header; while hidden, any
+in use is named in a note on the Line tab.
+
 ## Views
 
 **Drawing** (the line at its true width, in your colours), **Route** (black: the
