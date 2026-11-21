@@ -260,7 +260,6 @@
             <option value="rough">Rough draft (700 px)</option>
             <option value="draft">Draft (1000 px)</option>
             <option value="normal">Normal (1600 px)</option>
-            <option value="fine">Fine (2400 px)</option>
           </select>
         </div>
       </div>
@@ -442,9 +441,8 @@
     </details>
 
     <details data-tab="make" open>
-      <summary>The line &amp; output</summary>
+      <summary>Marks &amp; output</summary>
       <div class="body">
-        <table class="figs" id="figs"></table>
         <label class="check" title="on the preview: a bar across the line every tick spacing, with the total length so far"><input type="checkbox" id="ticks"> Show distance ticks</label>
         <label class="check" title="on the preview: each bend numbered in drawing order with its turn (R or L, degrees), a bar where it starts"><input type="checkbox" id="bendNums"> Show bend numbers</label>
         <div class="row">
@@ -465,6 +463,13 @@
           <button id="exportBends" title="every bend: where it starts along the line, its turn, radius and arc length">Bend table CSV</button>
         </div>
         <p class="note">Wire bending instructions (a nail or peg layout, a bend table) are planned: see docs/TODO.md.</p>
+      </div>
+    </details>
+
+    <details data-tab="make">
+      <summary>Figures</summary>
+      <div class="body">
+        <table class="figs" id="figs"></table>
       </div>
     </details>
   </aside>

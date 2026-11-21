@@ -6,8 +6,8 @@ or a length of wire can be bent to.
 
 - **Style:** filters applied to the image, in an order you choose, before its
   edges are found: *Median*, *Blur*, *Local contrast* (CLAHE), *Sharpen* and
-  *Painterly* (an edge-preserving Kuwahara filter, on by default: it calms
-  texture, so the edges left are the forms').
+  *Painterly* (an edge-preserving Kuwahara filter: it calms texture, so the
+  edges left are the forms'). All off by default.
 - **Edges & detail:** *Edge scale* is the size edges are looked for at (Canny's
   blur, in mm); *Edge amount* how many of the candidate edges start a line.
   *Smallest feature*: junctions closer than this merge, gaps narrower than this
@@ -89,10 +89,13 @@ be served over HTTP, not opened as a file.)
 ## Layout
 
 The sidebar has three tabs: **Picture** (image, tone, style, canvas, edges &
-detail), **Line** (joining, line width and bend, smoothing) and **Make** (the
-line's figures, marks for making it, printout and files). The experimental
-settings show only with **Show experiments** in the header; while hidden, any
+detail), **Line** (joining, line width and bend, smoothing) and **Make** (marks
+for making it, printout and files, and the line's figures, collapsed). The
+experimental settings show only with **Show experiments** in the header; while hidden, any
 in use is named in a note on the Line tab.
+
+Changing Tone or Style switches the preview to the Source view, and changing
+Edges & detail to the Edges view, so the effect is in sight.
 
 ## Views
 
@@ -109,7 +112,8 @@ the line from its start; the slider scrubs along it.
 Width and height in mm or inches, or a paper or frame size (A5 to 16 × 20 in),
 which turns to the image's orientation. Height 0 follows the image; a fixed
 height crops the image to cover the drawing (it is never stretched). *Precision*
-is the resolution the edges are found at: 700 to 2400 px on the long side.
+is the resolution the edges are found at: Rough draft (700 px on the long side, the
+default), Draft (1000) or Normal (1600).
 
 ## Outputs
 

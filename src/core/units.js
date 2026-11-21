@@ -42,7 +42,7 @@ export const PRESETS = [
 ];
 
 /** Working resolution: the long side of the work raster, px. */
-export const PRECISION = { rough: 700, draft: 1000, normal: 1600, fine: 2400 };
+export const PRECISION = { rough: 700, draft: 1000, normal: 1600 };
 
 /**
  * The steering's D gain is held to this (the user's cap). The stray grows with
@@ -55,11 +55,11 @@ export const DEFAULTS = {
   widthMm: 300,
   heightMm: 0,           // 0 = from the image's aspect
   units: 'mm',           // only for the lengths in notes; every number here is mm
-  precision: 'normal',
+  precision: 'rough',
   gamma: 1,
   brightness: 1,
   saturation: 1,
-  // the Style chain (core/style.js); null = its default (Painterly on)
+  // the Style chain (core/style.js); null = its default (every filter off)
   style: null,
   // finding the edges (core/edges.js)
   edgeScale: 1,          // mm, the Gaussian the gradient is taken at: larger finds broader, calmer edges

@@ -210,3 +210,8 @@ Asked for: fewer bends, distance ticks, numbered bends; tool-agnostic.
   header's Show experiments switch, and while hidden, any experiment away from
   its default is named in a note on the Line tab (they still act). Corner loops
   shows only when the line is not steered (steering is never tight).
+- 2026-11-21, the user's choices: Precision defaults to Rough draft and Fine
+  (2400 px) is gone (a project asking for it gets the default); every Style
+  filter is off by default (Painterly was on); a Tone or Style change shows the
+  Source view and an Edges & detail change the Edges view (app.js showFor); the
+  figures are their own section on the Make tab, collapsed.

@@ -211,6 +211,7 @@ function bindLengths() {
       showDetailPreset();
       if (id === 'lineWidth') paint();
       if (id === 'bendTol') showSections();   // the note on experiments in use
+      if (EDGE_IDS.includes(id)) showFor('edges');
       scheduleRun();   // the line width too: it sets how close two crossings count as one
     });
   }
@@ -218,6 +219,7 @@ function bindLengths() {
     state.s.edgeAmount = parseFloat($('edgeAmount').value);
     $('edgeAmountVal').textContent = `${Math.round(100 * state.s.edgeAmount)}%`;
     showDetailPreset();
+    showFor('edges');
     scheduleRun();
   });
   for (const b of document.querySelectorAll('#unitSeg button')) {
@@ -235,6 +237,7 @@ function bindLengths() {
   for (const b of document.querySelectorAll('#detailSeg button')) {
     b.addEventListener('click', () => {
       Object.assign(state.s, DETAIL[b.dataset.detail]);
+      showFor('edges');
       showLengths();
       scheduleRun(0);
     });
@@ -600,6 +603,17 @@ function setView(v) {
   paint();
 }
 
+/** The length fields that change how the edges are found (their changes show on the Edges view). */
+const EDGE_IDS = ['edgeScale', 'minFeature', 'minLength', 'simplify'];
+
+/**
+ * Show the view a change acts on: Tone and Style on the Source view (the image
+ * the edges are found in), Edges & detail on the Edges view.
+ */
+function showFor(v) {
+  if (state.view !== v) setView(v);
+}
+
 // --------------------------------------------------------------- animation
 const ANIM_MS = 8000;   // the whole line, start to end
 
@@ -945,13 +959,13 @@ function buildStyleUI() {
       '<div class="fbody"><div class="fparams"></div><p class="note"></p></div>';
     const tick = card.querySelector('input');
     tick.checked = !!on[fid];
-    tick.addEventListener('change', () => { on[fid] = tick.checked; buildStyleUI(); scheduleRun(0); });
+    tick.addEventListener('change', () => { on[fid] = tick.checked; buildStyleUI(); showFor('source'); scheduleRun(0); });
     for (const b of card.querySelectorAll('button')) {
       b.addEventListener('click', () => {
         const j = i + parseInt(b.dataset.dir, 10);
         [order[i], order[j]] = [order[j], order[i]];
         buildStyleUI();
-        if (on[order[i]] && on[order[j]]) scheduleRun(0);
+        if (on[order[i]] && on[order[j]]) { showFor('source'); scheduleRun(0); }
       });
     }
     const fbody = card.querySelector('.fbody');
@@ -976,7 +990,7 @@ function renderParams(host, defs, values, prefix) {
       el.innerHTML = `<input type="checkbox" id="${id}"> ${p.label}`;
       const input = el.querySelector('input');
       input.checked = !!values[p.key];
-      input.addEventListener('change', () => { values[p.key] = input.checked; scheduleRun(); });
+      input.addEventListener('change', () => { values[p.key] = input.checked; showFor('source'); scheduleRun(); });
     } else if (p.type === 'select') {
       el = document.createElement('div');
       el.className = 'row';
@@ -984,7 +998,7 @@ function renderParams(host, defs, values, prefix) {
         p.options.map(([v, l]) => `<option value="${v}">${l}</option>`).join('') + '</select>';
       const input = el.querySelector('select');
       input.value = values[p.key];
-      input.addEventListener('change', () => { values[p.key] = input.value; scheduleRun(); });
+      input.addEventListener('change', () => { values[p.key] = input.value; showFor('source'); scheduleRun(); });
     } else {
       el = document.createElement('div');
       el.className = 'row';
@@ -998,7 +1012,7 @@ function renderParams(host, defs, values, prefix) {
       };
       input.value = values[p.key];
       show();
-      input.addEventListener('input', () => { values[p.key] = parseFloat(input.value); show(); scheduleRun(); });
+      input.addEventListener('input', () => { values[p.key] = parseFloat(input.value); show(); showFor('source'); scheduleRun(); });
     }
     if (p.hint) el.title = p.hint;
     host.appendChild(el);
@@ -1015,7 +1029,7 @@ function setStatus(text, cls = '') {
 function bindTone() {
   for (const id of ['gamma', 'brightness', 'saturation']) {
     const input = $(id), val = $(`${id}Val`);
-    input.addEventListener('input', () => { val.textContent = parseFloat(input.value).toFixed(2); updateToned(); scheduleRun(); });
+    input.addEventListener('input', () => { val.textContent = parseFloat(input.value).toFixed(2); updateToned(); showFor('source'); scheduleRun(); });
   }
 }
 
