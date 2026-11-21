@@ -36,7 +36,7 @@ export function run() {
   for (const join of ['euler', 'tsp']) {
     const p = runPipeline(rings, { ...base, join, minRadius: 0.5 }, {});
     const c = continuity(p.path, 0.01);
-    check(`rings, ${join}: one continuous line, kinks only at reported tight corners`, p.path.segs.length > 10 && c.gap < 1e-3 && c.kinks <= p.tight.length,
+    check(`rings, ${join}: one continuous line, kinks only at reported tight corners`, p.path.segs.length > 10 && c.gap < 1e-3 && c.kinks <= p.stats.sharp,
       `${p.stats.chains} chains, ${num(p.stats.length, 0)} mm, gap ${c.gap.toExponential(1)}, ${c.kinks} kinks, ${p.tight.length} tight`);
     if (join === 'tsp') check('rings, tsp: nothing retraced', p.stats.retrace === 0, `${num(p.stats.retrace, 1)} mm`);
   }
@@ -58,7 +58,7 @@ export function run() {
     const p = runPipeline(rings, { ...wire, ...v }, {});
     const c = continuity(p.path, 0.01);
     check(`rings, wire, ${JSON.stringify(v).replace(/[{}"]/g, '')}: one continuous line, kinks only at reported tight corners`,
-      p.path.segs.length > 10 && c.gap < 1e-3 && c.kinks <= p.tight.length,
+      p.path.segs.length > 10 && c.gap < 1e-3 && c.kinks <= p.stats.sharp,
       `${p.tight.length} tight (plain ${plainW.tight.length}), ${num(p.stats.length, 0)} mm (plain ${num(plainW.stats.length, 0)}), stray ${num(p.stats.strayMax, 2)} mm`);
   }
   // the defaults: steered, P 1, D 1, looking 4 mm ahead
@@ -67,7 +67,7 @@ export function run() {
   const pdr = pd.path.segs.filter((s) => s.k === 'A').map((s) => s.r);
   check('defaults: the line is steered, one continuous tangent line, no arc under the 3 mm bend, nothing tight',
     pd.path.segs.length > 10 && pdc.gap < 1e-3 && pdc.kinks === 0 && pdr.every((r) => r >= 3 - 1e-6) && pd.tight.length === 0,
-    `${num(pd.stats.length, 0)} mm, tightest ${num(Math.min(...pdr), 2)} mm, stray ${num(pd.stats.strayMax, 2)} / ${num(pd.stats.strayMean, 2)} mm`);
+    `${num(pd.stats.length, 0)} mm, tightest ${num(Math.min(...pdr), 2)} mm, stray ${num(pd.stats.strayMax, 2)} / ${num(pd.stats.strayMean, 2)} mm, ${pdc.kinks} kinks, ${pd.tight.length} tight, ${pd.stats.bends} bends`);
   const pc = runPipeline(rings, { ...base, closed: true }, {});
 let refusedNeg = '';  try { runPipeline(rings, { ...base, maxStray: -1 }, {}); } catch (e) { refusedNeg = e.message; }  check('a negative stray is refused, not used', refusedNeg === 'lengths cannot be negative', refusedNeg);
   check('closed: ends where it starts', Math.hypot(pc.start.x - pc.end.x, pc.start.y - pc.end.y) < 1e-6, '');

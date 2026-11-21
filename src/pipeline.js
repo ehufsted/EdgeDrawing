@@ -31,8 +31,9 @@ import { luminance } from './core/color.js';
 import { cannyEdges } from './core/edges.js';
 import { traceGraph, cleanGraph, degrees } from './core/graph.js';
 import { routeGraph } from './core/route.js';
-import { pathStats, samplePath, crossings } from './core/arcs.js';
-import { fitLine } from './core/bends.js';
+import { pathStats, samplePath, crossings, routePolyline } from './core/arcs.js';
+import { fitLine, tightPlaces, measureStray } from './core/bends.js';
+import { refitPath } from './core/refit.js';
 
 /**
  * @param {{width,height,data}} rgba
@@ -96,11 +97,22 @@ export function runPipeline(rgba, settings, opts = {}) {
 
   // D: straights and arcs
   const keyD = [keyC, s.minRadius, s.simplify, s.loops, s.lineWidth, s.smoothing, s.joinShape, s.bendFix, s.maxStray,
-    s.smoothing === 'fourier' ? s.fourierScale : null, s.smoothing === 'pid' ? [s.pidLook, s.pidP, s.pidD] : null];
+    s.smoothing === 'fourier' ? s.fourierScale : null, s.smoothing === 'pid' ? [s.pidLook, s.pidP, s.pidD] : null, s.bendTol];
   const D = stage('D', keyD, () => {
     progress('fitting arcs');
     const fit = fitLine(C.runs, { minRadius: s.minRadius, tol: s.simplify, loops: s.loops, smoothing: s.smoothing, joins: s.joinShape, fix: s.bendFix, maxStray: s.maxStray,
       fourierScale: s.fourierScale, pid: { look: s.pidLook, p: s.pidP, d: s.pidD } });
+    if (s.bendTol > 0 && fit.path.segs.length) {
+      // fewer bends: refitted as the fewest arcs within bendTol of the line, never
+      // tighter than the bend; its tight places are the corners it had to keep sharp
+      progress('fewer bends');
+      const rf = refitPath(fit.path, { tol: s.bendTol, minRadius: s.minRadius });
+      const { pts, kinds } = routePolyline(C.runs);
+      fit.path = rf.path;
+      fit.tight = tightPlaces(rf.forced.map((p) => ({ ...p, r: 0 })), s.minRadius);
+      fit.sharp = rf.forced.length;
+      fit.stray = measureStray(pts, kinds, rf.path);
+    }
     progress('measuring');
     const st = pathStats(fit.path);
     const X = fit.path.segs.length ? crossings(samplePath(fit.path), Math.max(1, 2 * s.lineWidth)) : [];
@@ -114,7 +126,7 @@ export function runPipeline(rgba, settings, opts = {}) {
   const stats = {
     length: st.length, edge: st.edge, retrace: st.retrace, join: st.join,
     bends: st.bends, minR: isFinite(st.minR) ? st.minR : 0,
-    tight: D.tight.length, loops: D.loops, crossings: D.crossings.length, strayMax: D.stray.max, strayMean: D.stray.mean,
+    tight: D.tight.length, sharp: D.sharp ?? D.tight.length, loops: D.loops, crossings: D.crossings.length, strayMax: D.stray.max, strayMean: D.stray.mean,
     chains: g.edges.length, merged: g.stats.merged, spurs: g.stats.spurs, pieces: g.stats.pieces,
     ...C.stats,
   };
@@ -157,7 +169,7 @@ function validate(s) {
   if (!(s.heightMm >= 0)) throw new Error('height must be 0 (from the image) or more');
   if (!(s.edgeScale > 0)) throw new Error('the edge scale must be more than 0');
   if (!(s.edgeAmount > 0 && s.edgeAmount <= 1)) throw new Error('the edge amount must be between 0 and 100%');
-  if ([s.minFeature, s.minLength, s.simplify, s.minRadius, s.lineWidth, s.maxStray].some((v) => !(v >= 0))) throw new Error('lengths cannot be negative');
+  if ([s.minFeature, s.minLength, s.simplify, s.minRadius, s.lineWidth, s.maxStray, s.bendTol].some((v) => !(v >= 0))) throw new Error('lengths cannot be negative');
   if (!(s.fourierScale > 0) || !(s.pidLook > 0)) throw new Error('the length scale and the look ahead must be more than 0');
   if (!(s.pidP >= 0) || !(s.pidD >= 0)) throw new Error('the gains cannot be negative');
 }

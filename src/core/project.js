@@ -3,7 +3,7 @@
 //   { app: 'EdgeDrawing', version, savedAt,
 //     image: { kind: 'sample', name } | { kind: 'file', name, dataURL },
 //     units, settings: {...units.DEFAULTS, style (core/style.js)},
-//     display: {ink, paper} }
+//     display: {ink, paper, marks, tickMm, markSize} }
 //
 // THE PLAN IS NOT SAVED. It is deterministic (no randomness, and the 2-opt
 // works to a fixed budget, not a clock), so the same image and settings
@@ -28,7 +28,7 @@ const NUMS = {
   saturation: (x) => x >= 0, edgeScale: (x) => x > 0, edgeAmount: (x) => x > 0 && x <= 1,
   minFeature: (x) => x >= 0, minLength: (x) => x >= 0, simplify: (x) => x >= 0,
   lineWidth: (x) => x >= 0, minRadius: (x) => x >= 0, maxStray: (x) => x >= 0,
-  fourierScale: (x) => x > 0, pidLook: (x) => x > 0, pidP: (x) => x >= 0, pidD: (x) => x >= 0 && x <= PID_D_MAX,
+  fourierScale: (x) => x > 0, pidLook: (x) => x > 0, bendTol: (x) => x >= 0, pidP: (x) => x >= 0, pidD: (x) => x >= 0 && x <= PID_D_MAX,
 };
 /** The settings that are one of a few words. */
 const ENUMS = {
@@ -37,7 +37,8 @@ const ENUMS = {
 };
 const BOOLS = ['closed', 'loops'];
 
-export const DISPLAY = { ink: '#1a1a1a', paper: '#ffffff' };
+// marks: show the making marks (core/marks.js) on the preview; tickMm: their spacing; markSize: label size, mm
+export const DISPLAY = { ink: '#1a1a1a', paper: '#ffffff', marks: false, tickMm: 100, markSize: 2.5 };
 
 /** The project as JSON text. `p` is the shape above (savedAt is filled in). */
 export function projectJSON(p) {
@@ -88,6 +89,10 @@ export function parseProject(json) {
   settings.precision = PRECISION[src.precision] ? src.precision : DEFAULTS.precision;
 
   const d = o.display && typeof o.display === 'object' ? o.display : {};
-  const display = { ink: normalizeHex(d.ink) || DISPLAY.ink, paper: normalizeHex(d.paper) || DISPLAY.paper };
+  const pos = (v, def) => (isFinite(Number(v)) && Number(v) > 0 ? Number(v) : def);
+  const display = {
+    ink: normalizeHex(d.ink) || DISPLAY.ink, paper: normalizeHex(d.paper) || DISPLAY.paper,
+    marks: typeof d.marks === 'boolean' ? d.marks : DISPLAY.marks, tickMm: pos(d.tickMm, DISPLAY.tickMm), markSize: pos(d.markSize, DISPLAY.markSize),
+  };
   return { project: { image, units: o.units === 'in' ? 'in' : 'mm', settings, display }, problems };
 }

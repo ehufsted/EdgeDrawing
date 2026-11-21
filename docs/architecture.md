@@ -173,3 +173,29 @@ saved with a smoothing under `bendFix` are read into `smoothing`.
   wire's (1.2 mm, 3 mm bend), and D is capped at 2 (PID_D_MAX). Stray against D
   with a 3 mm bend (draft precision): Mona Lisa mean 1.12 / 1.15 / 1.25 / 2.03 /
   2.81 mm at D 0 / 0.5 / 1 / 1.5 / 2; rhino 0.92 / 1.07 / 1.22 / 2.28 / 4.34 mm.
+
+## Making it by hand (2026-11-20)
+
+Asked for: fewer bends, distance ticks, numbered bends; tool-agnostic.
+
+- core/refit.js refits the finished line (stage D, after the smoothing) as the
+  fewest arcs within `bendTol` (0.5 mm), greedy from the start, each tangent to
+  the last, none tighter than the bend. Measured at the defaults: rhino (Coarse)
+  3,293 segments / 2,896 bends to 322 / 313, stray mean 1.34 to 1.17 mm; Mona
+  Lisa 17,280 / 14,725 to 2,011 / 1,914. The line grows 5–7%, mostly where the
+  refit rejoins a steered line at full lock by a Dubins path.
+- Steps to get there: a tangent arc through the next point is impossible where
+  the line runs AT the bend and the carried heading is slightly off, so an arc
+  at the bend may end near the point (within tol); then the tolerance is
+  loosened (×2, ×4) for one arc; then a Dubins rejoin; only then a sharp corner
+  (one straight across it, reported). Without these, the steered rings sample
+  had 7 sharp corners; with them none.
+- An arc never spans two kinds (edge / retrace / join), so the lengths by kind
+  stay true, unless a run is too short to turn in.
+- core/marks.js: bends are arcs of 3° or more (gentler ones are a slight curve
+  in a straight); R / L as seen on the page (y down: an increasing angle is
+  clockwise). Ticks carry the TOTAL length. Labels: the tick labels first, on
+  the clear side; each bend label tries 16 spots, the first covering neither
+  the wire nor another label wins, else the one covering least. Dense drawings
+  still crowd (about 300 bends on a 30 cm rhino at 2.5 mm labels): the bend
+  table carries everything regardless.

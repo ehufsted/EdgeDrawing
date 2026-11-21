@@ -18,12 +18,14 @@ import { planHTML, PAPERS, pageWindows, printable, fmtLen, longText } from './co
 import { projectJSON, parseProject, DISPLAY } from './core/project.js';
 import { filterById, defaultStyle } from './core/style.js';
 import { trimPath } from './core/arcs.js';
+import { layoutMarks, bendList, bendText, bendCSV, alongText, MIN_BEND } from './core/marks.js';
 import { generateSample } from './app/samples.js';
 
 const $ = (id) => document.getElementById(id);
 const STORE = 'edgedrawing.v1';
 
-const LEN_IDS = ['widthMm', 'heightMm', 'edgeScale', 'minFeature', 'minLength', 'simplify', 'lineWidth', 'minRadius', 'maxStray', 'fourierScale', 'pidLook'];
+const LEN_IDS = ['widthMm', 'heightMm', 'edgeScale', 'minFeature', 'minLength', 'simplify', 'lineWidth', 'minRadius', 'maxStray', 'fourierScale', 'pidLook', 'bendTol'];
+const DISP_LEN_IDS = ['tickMm', 'markSize'];   // display lengths (state.disp): the making marks
 const GAIN_IDS = ['pidP', 'pidD'];   // the steering's gains: plain numbers
 const BEND_IDS = ['smoothing', 'joinShape', 'walk', 'bendFix', 'bendSmooth'];   // the smoothing selects
 
@@ -145,7 +147,7 @@ function validate(s) {
   if (!(s.widthMm > 0)) return 'enter a width';
   if (!(s.heightMm >= 0)) return 'height must be 0 (from the image) or more';
   if (!(s.edgeScale > 0)) return 'the edge scale must be more than 0';
-  if ([s.minFeature, s.minLength, s.simplify, s.lineWidth, s.minRadius, s.maxStray].some((v) => !(v >= 0))) return 'lengths cannot be negative';
+  if ([s.minFeature, s.minLength, s.simplify, s.lineWidth, s.minRadius, s.maxStray, s.bendTol].some((v) => !(v >= 0))) return 'lengths cannot be negative';
   if (!(s.fourierScale > 0) || !(s.pidLook > 0)) return 'the length scale and the look ahead must be more than 0';
   if (!(s.pidP >= 0) || !(s.pidD >= 0)) return 'the gains cannot be negative';
   return '';
@@ -181,6 +183,7 @@ const unitLabel = () => (state.units === 'in' ? 'in' : 'mm');
 
 function showLengths() {
   for (const id of LEN_IDS) $(id).value = L(state.s[id]);
+  for (const id of DISP_LEN_IDS) $(id).value = L(state.disp[id]);
   for (const el of document.querySelectorAll('.u')) el.textContent = unitLabel();
   for (const b of document.querySelectorAll('#unitSeg button')) b.setAttribute('aria-pressed', String(b.dataset.units === state.units));
   $('edgeAmount').value = state.s.edgeAmount;
@@ -482,6 +485,54 @@ function drawView(ctx, plan, view, k) {
   } else if (view === 'edges') drawEdges(ctx, plan, k);
   else if (view === 'source') drawSource(ctx, plan);
   else if (view === 'problems') { drawProblems(ctx, plan, k); drawMarkers(ctx, plan, k); }
+  if (state.disp.marks && view !== 'edges' && view !== 'source') drawMade(ctx, plan, k);
+}
+
+/** How many bends there are to make (cached on the plan). */
+function bendCount(plan) {
+  if (plan._bends === undefined) Object.defineProperty(plan, '_bends', { value: bendList(plan.path).length, enumerable: false });
+  return plan._bends;
+}
+
+/** The making marks (core/marks.js), laid out once per plan and settings. */
+function madeLayout(plan, k) {
+  const fs = Math.max(state.disp.markSize, 9 / k);   // readable on screen at any zoom
+  const key = `${state.disp.tickMm}|${fs.toFixed(3)}|${state.units}|${state.s.lineWidth}`;
+  if (!plan._made || plan._made.key !== key) {
+    Object.defineProperty(plan, '_made', { value: { key, layout: layoutMarks(plan.path, state.disp.tickMm, fs, state.s.lineWidth, state.units) }, enumerable: false, configurable: true, writable: true });
+  }
+  return plan._made.layout;
+}
+
+/** Ticks with the total length beside them, and each bend's number and turn (as the template prints them). */
+function drawMade(ctx, plan, k) {
+  if (state.anim.t < 1) return;
+  const { ticks, bends, spots, tickSpots, fs } = madeLayout(plan, k);
+  const bar = Math.max(1.2, 1.5 * state.s.lineWidth + fs * 0.4);
+  ctx.save();
+  ctx.strokeStyle = '#c0392b'; ctx.fillStyle = '#c0392b';
+  ctx.lineWidth = Math.max(0.15, 1.5 / k);
+  ctx.beginPath();
+  for (const t of ticks) { ctx.moveTo(t.x + t.uy * bar, t.y - t.ux * bar); ctx.lineTo(t.x - t.uy * bar, t.y + t.ux * bar); }
+  ctx.stroke();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = `${0.8 * fs}px Arial, Helvetica, sans-serif`;
+  ticks.forEach((t, i) => ctx.fillText(alongText(t.at, state.units), tickSpots[i].x, tickSpots[i].y));
+  ctx.strokeStyle = '#1f5fbf'; ctx.fillStyle = '#1f5fbf';
+  ctx.beginPath();
+  bends.forEach((b, i) => {
+    ctx.moveTo(b.sx + b.uy * bar, b.sy - b.ux * bar); ctx.lineTo(b.sx - b.uy * bar, b.sy + b.ux * bar);
+    ctx.moveTo(spots[i].x, spots[i].y); ctx.lineTo(b.mx, b.my);
+  });
+  ctx.lineWidth = Math.max(0.1, 1 / k);
+  ctx.stroke();
+  bends.forEach((b, i) => {
+    ctx.font = `bold ${fs}px Arial, Helvetica, sans-serif`;
+    ctx.fillText(String(b.n), spots[i].x, spots[i].y - 0.35 * fs);
+    ctx.font = `${0.7 * fs}px Arial, Helvetica, sans-serif`;
+    ctx.fillText(bendText(b), spots[i].x, spots[i].y + 0.5 * fs);
+  });
+  ctx.restore();
 }
 
 const HINTS = {
@@ -602,6 +653,7 @@ function renderFigures() {
     row('over a line again', `${longText(st.retrace, U)} · ${pct(st.retrace, st.length)}`, KIND.retrace),
     row('not in the image', `${longText(st.join, U)} · ${pct(st.join, st.length)}`, KIND.join),
     row('Bends (arcs)', String(st.bends)),
+    row(`Bends to make (${MIN_BEND}° or more)`, String(bendCount(plan))),
     row('Tightest bend', st.bends ? `${L(st.minR, U === 'in' ? 3 : 1)} ${unitLabel()} radius` : '—'),
     row('Places tighter than the smallest bend', String(st.tight)),
     row('Corner loops', String(st.loops)),
@@ -633,7 +685,11 @@ function bindExports() {
     updatePrintNote();
     $('printDlg').showModal();
   });
-  for (const id of ['paperSize', 'pSummary', 'pFit', 'pTemplate']) $(id).addEventListener('change', updatePrintNote);
+  $('exportBends').addEventListener('click', () => {
+    if (state.plan) downloadFile(bendCSV(bendList(state.plan.path)), `${fileBase()}-bends.csv`, 'text/csv');
+  });
+  for (const id of ['paperSize', 'pSummary', 'pFit', 'pTemplate', 'pBends']) $(id).addEventListener('change', updatePrintNote);
+  $('pTemplate').addEventListener('change', () => { $('pMarks').disabled = !$('pTemplate').checked; });
   $('printClose').addEventListener('click', () => $('printDlg').close());
   $('printGo').addEventListener('click', () => {
     const plan = state.plan;
@@ -642,6 +698,7 @@ function bindExports() {
       paper: $('paperSize').value, units: state.units, title: `${state.imageName} — single-line drawing`,
       summary: $('pSummary').checked, fit: $('pFit').checked, template: $('pTemplate').checked,
       previewURL: renderPNG(plan, 'drawing', 1400), lineWidth: state.s.lineWidth, minRadius: state.s.minRadius,
+      marks: $('pMarks').checked, bendTable: $('pBends').checked, tickMm: state.disp.tickMm, markSize: state.disp.markSize,
     });
     const w = window.open('', '_blank');
     if (!w) { setStatus('the browser blocked the new window: allow pop-ups for this page', 'bad'); return; }
@@ -780,6 +837,7 @@ function applySettings(units, s, disp) {
   showLine();
   $('ink').value = disp.ink;
   $('paper').value = disp.paper;
+  $('marks').checked = disp.marks;
   $('preset').value = state.preset;
   renderStartNote();
   save();
@@ -926,6 +984,16 @@ function bindDisplay() {
       const h = normalizeHex($(id).value);
       if (!h) return;
       state.disp[id] = h;
+      save();
+      paint();
+    });
+  }
+  $('marks').addEventListener('change', () => { state.disp.marks = $('marks').checked; save(); paint(); });
+  for (const id of DISP_LEN_IDS) {
+    $(id).addEventListener('input', () => {
+      const v = toMm(parseFloat($(id).value), state.units);
+      if (!(v > 0)) return;
+      state.disp[id] = v;
       save();
       paint();
     });
