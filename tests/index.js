@@ -8,6 +8,7 @@ import * as route from './core.route.js';
 import * as arcs from './core.arcs.js';
 import * as output from './core.output.js';
 import * as bends from './core.bends.js';
+import * as marks from './core.marks.js';
 import * as pipeline from './pipeline.js';
 
 export const SECTIONS = [
@@ -17,6 +18,7 @@ export const SECTIONS = [
   ['core.arcs', arcs],
   ['core.output', output],
   ['core.bends', bends],
+  ['core.marks', marks],
   ['pipeline', pipeline],
 ];
 

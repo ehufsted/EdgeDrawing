@@ -6,8 +6,8 @@ or a length of wire can be bent to.
 
 - **Style:** filters applied to the image, in an order you choose, before its
   edges are found: *Median*, *Blur*, *Local contrast* (CLAHE), *Sharpen* and
-  *Painterly* (an edge-preserving Kuwahara filter, on by default: it calms
-  texture, so the edges left are the forms').
+  *Painterly* (an edge-preserving Kuwahara filter: it calms texture, so the
+  edges left are the forms'). All off by default.
 - **Edges & detail:** *Edge scale* is the size edges are looked for at (Canny's
   blur, in mm); *Edge amount* how many of the candidate edges start a line.
   *Smallest feature*: junctions closer than this merge, gaps narrower than this
@@ -60,6 +60,16 @@ or a length of wire can be bent to.
     instead).
   - *Edge smoothing: only where tighter than the bend*, instead of everywhere at
     two radii.
+  - *Fewer bends, within* (off by default): the finished line is refitted as the
+    fewest arcs that stay within this of it, none tighter than the smallest
+    bend: about a tenth of the bends, but a steered line comes out wavy (it
+    follows the steering's ripple) rather than in broad curves.
+- **Making it by hand** (tool-agnostic): *Show distance ticks* marks the line
+  every *Ticks every* (10 cm by default) with the TOTAL length so far, never the
+  length since the last tick, so a slip at one bend does not shift the numbers
+  after it. *Show bend numbers* numbers each bend in drawing order with its turn (R clockwise or L anticlockwise as the line runs, seen on
+  the page, and its angle), a bar across the line where it starts. Labels are
+  placed clear of the line and of each other where there is room.
 - **The line's figures:** length (how much draws the image's edges, goes over a
   line again, or is not in the image), bends, the tightest bend, places tighter
   than the smallest bend, loops, how far the line strays from the edges (at
@@ -76,6 +86,17 @@ powershell -ExecutionPolicy Bypass -File serve.ps1
 then open <http://localhost:8080/>. (Any static server works; the page only has to
 be served over HTTP, not opened as a file.)
 
+## Layout
+
+The sidebar has three tabs: **Picture** (image, tone, style, canvas, edges &
+detail), **Line** (joining, line width and bend, smoothing) and **Make** (marks
+for making it, printout and files, and the line's figures, collapsed). The
+experimental settings show only with **Show experiments** in the header; while hidden, any
+in use is named in a note on the Line tab.
+
+Changing Tone or Style switches the preview to the Source view, and changing
+Edges & detail to the Edges view, so the effect is in sight.
+
 ## Views
 
 **Drawing** (the line at its true width, in your colours), **Route** (black: the
@@ -91,13 +112,15 @@ the line from its start; the slider scrubs along it.
 Width and height in mm or inches, or a paper or frame size (A5 to 16 × 20 in),
 which turns to the image's orientation. Height 0 follows the image; a fixed
 height crops the image to cover the drawing (it is never stretched). *Precision*
-is the resolution the edges are found at: 700 to 2400 px on the long side.
+is the resolution the edges are found at: Rough draft (700 px on the long side, the
+default), Draft (1000) or Normal (1600).
 
 ## Outputs
 
 | Button | What |
 | --- | --- |
-| Print / PDF… | The figures with a preview and how to draw it; the whole drawing on one page; the drawing at 1:1 split across pages that overlap by 10 mm, with the start and end marked and a 50 mm bar to check the scale. Print at 100%. |
+| Print / PDF… | The figures with a preview and how to draw it; the whole drawing on one page; the drawing at 1:1 split across pages that overlap by 10 mm, with the start and end marked, a 50 mm bar to check the scale, and (each ticked by default) the distance ticks and the numbered bends; the bend table (each bend: where it starts along the line, its turn, radius and arc length). Print at 100%. |
+| Bend table CSV | The same table, one row per bend. |
 | Drawing SVG | The line at true size, as ONE path of straights (L) and arcs (A), stroked at the line width: for a plotter, or to import. |
 | PNG | The current view. |
 

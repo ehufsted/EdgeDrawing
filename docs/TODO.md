@@ -58,3 +58,13 @@ smoothing, merge / remove / optimize; see docs/architecture.md for the numbers.
 - Tone methods for the registry: TSP stipple art, squiggle / spiral (amplitude
   modulated), Hilbert curve.
 - G-code export for pen plotters.
+
+## Making it by hand: next (offered 2026-11-20, not chosen yet)
+
+Done: fewer bends (core/refit.js), distance ticks, numbered bends and a bend
+table. Offered and still open: a wire ruler strip (the line straightened, every
+bend start marked, to mark straight wire before bending); checkpoints to pin;
+sectioned pages; radii matched to a tool set; springback over-bend; a
+difficulty map; bending from the middle out; a step-by-step bending mode; the
+screen as a 1:1 template; a photo check for drift. Also: label crowding on dense
+drawings (a leader-line layout, or labels only on bends above an angle).

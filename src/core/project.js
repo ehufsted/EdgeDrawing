@@ -3,7 +3,7 @@
 //   { app: 'EdgeDrawing', version, savedAt,
 //     image: { kind: 'sample', name } | { kind: 'file', name, dataURL },
 //     units, settings: {...units.DEFAULTS, style (core/style.js)},
-//     display: {ink, paper} }
+//     display: {ink, paper, ticks, bendNums, tickMm, markSize} }
 //
 // THE PLAN IS NOT SAVED. It is deterministic (no randomness, and the 2-opt
 // works to a fixed budget, not a clock), so the same image and settings
@@ -18,6 +18,7 @@
 import { normalizeHex } from './color.js';
 import { DEFAULTS, PRECISION, PID_D_MAX } from './units.js';
 import { normalizeStyle } from './style.js';
+import { TICK_MIN, LABEL_MIN, LABEL_MAX } from './marks.js';
 
 export const PROJECT_VERSION = 1;
 export const APP = 'EdgeDrawing';
@@ -28,7 +29,7 @@ const NUMS = {
   saturation: (x) => x >= 0, edgeScale: (x) => x > 0, edgeAmount: (x) => x > 0 && x <= 1,
   minFeature: (x) => x >= 0, minLength: (x) => x >= 0, simplify: (x) => x >= 0,
   lineWidth: (x) => x >= 0, minRadius: (x) => x >= 0, maxStray: (x) => x >= 0,
-  fourierScale: (x) => x > 0, pidLook: (x) => x > 0, pidP: (x) => x >= 0, pidD: (x) => x >= 0 && x <= PID_D_MAX,
+  fourierScale: (x) => x > 0, pidLook: (x) => x > 0, bendTol: (x) => x >= 0, pidP: (x) => x >= 0, pidD: (x) => x >= 0 && x <= PID_D_MAX,
 };
 /** The settings that are one of a few words. */
 const ENUMS = {
@@ -37,7 +38,8 @@ const ENUMS = {
 };
 const BOOLS = ['closed', 'loops'];
 
-export const DISPLAY = { ink: '#1a1a1a', paper: '#ffffff' };
+// ticks, bendNums: show the distance ticks, the numbered bends (core/marks.js) on the preview; tickMm: tick spacing; markSize: label size, mm
+export const DISPLAY = { ink: '#1a1a1a', paper: '#ffffff', ticks: false, bendNums: false, tickMm: 100, markSize: 2.5 };
 
 /** The project as JSON text. `p` is the shape above (savedAt is filled in). */
 export function projectJSON(p) {
@@ -64,9 +66,7 @@ export function parseProject(json) {
   else if (im.kind === 'file' && typeof im.dataURL === 'string' && /^data:image\//.test(im.dataURL)) image = { kind: 'file', name: String(im.name || 'image'), dataURL: im.dataURL };
   else problems.push('no usable image in the project');
 
-  const src = o.settings && typeof o.settings === 'object' ? { ...o.settings } : {};
-  // saved while the line smoothings were tight-corner fixes: they are the smoothing now
-  if (['pid', 'fourier', 'optimize'].includes(src.bendFix) && src.smoothing === undefined) { src.smoothing = src.bendFix; src.bendFix = 'none'; }
+  const src = o.settings && typeof o.settings === 'object' ? o.settings : {};
   const settings = { ...DEFAULTS };
   for (const [k, ok] of Object.entries(NUMS)) {
     if (src[k] === undefined) continue;
@@ -85,9 +85,17 @@ export function parseProject(json) {
   const ns = normalizeStyle(src.style);
   settings.style = ns.style;
   problems.push(...ns.problems);
-  settings.precision = PRECISION[src.precision] ? src.precision : DEFAULTS.precision;
+  if (src.precision === undefined || PRECISION[src.precision]) settings.precision = src.precision ?? DEFAULTS.precision;
+  else { settings.precision = DEFAULTS.precision; problems.push(`precision: unusable, using ${DEFAULTS.precision}`); }
 
   const d = o.display && typeof o.display === 'object' ? o.display : {};
-  const display = { ink: normalizeHex(d.ink) || DISPLAY.ink, paper: normalizeHex(d.paper) || DISPLAY.paper };
+  const pos = (v, def) => (isFinite(Number(v)) && Number(v) > 0 ? Number(v) : def);
+  const display = {
+    ink: normalizeHex(d.ink) || DISPLAY.ink, paper: normalizeHex(d.paper) || DISPLAY.paper,
+    ticks: typeof d.ticks === 'boolean' ? d.ticks : DISPLAY.ticks,
+    bendNums: typeof d.bendNums === 'boolean' ? d.bendNums : DISPLAY.bendNums,
+    tickMm: pos(d.tickMm, DISPLAY.tickMm) >= TICK_MIN ? pos(d.tickMm, DISPLAY.tickMm) : DISPLAY.tickMm,
+    markSize: pos(d.markSize, DISPLAY.markSize) >= LABEL_MIN && pos(d.markSize, DISPLAY.markSize) <= LABEL_MAX ? pos(d.markSize, DISPLAY.markSize) : DISPLAY.markSize,
+  };
   return { project: { image, units: o.units === 'in' ? 'in' : 'mm', settings, display }, problems };
 }

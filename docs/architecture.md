@@ -155,8 +155,7 @@ The user found the PID steering best (about P 1, I 0, D 1, varying the look
 ahead) and Fourier stylistically interesting. So `smoothing` is now its own
 setting for the whole line, 'pid' by default (look ahead 4 mm), with 'fourier',
 'optimize' (relax) and 'none'; Dubins joins, the paired walk, merge / remove and
-tight-only edge smoothing moved to the Experimental smoothing tab. Projects
-saved with a smoothing under `bendFix` are read into `smoothing`.
+tight-only edge smoothing moved to the Experimental smoothing tab.
 
 - A pen (no bend) still caps the steering at a quarter of the look ahead:
   uncapped, the controller swung at the scale of one step (the Mona Lisa came
@@ -167,9 +166,57 @@ saved with a smoothing under `bendFix` are read into `smoothing`.
 - Seen at 4× in pen mode: a faint ripple on some steered strokes; P, D or the
   step length could calm it.
 - The integral term was removed at the user's request (2026-11-19): the steering
-  is a PD controller, P 1 and D 1 by default. (The setting keeps its id 'pid',
-  so projects open unchanged; a saved I gain is ignored.)
+  is a PD controller, P 1 and D 1 by default (the setting is still called 'pid').
 - The pen / wire choice was removed at the user's request: the defaults are the
   wire's (1.2 mm, 3 mm bend), and D is capped at 2 (PID_D_MAX). Stray against D
   with a 3 mm bend (draft precision): Mona Lisa mean 1.12 / 1.15 / 1.25 / 2.03 /
   2.81 mm at D 0 / 0.5 / 1 / 1.5 / 2; rhino 0.92 / 1.07 / 1.22 / 2.28 / 4.34 mm.
+
+## Making it by hand (2026-11-20)
+
+Asked for: fewer bends, distance ticks, numbered bends; tool-agnostic.
+
+- core/refit.js refits the finished line (stage D, after the smoothing) as the
+  fewest arcs within `bendTol` (0.5 mm), greedy from the start, each tangent to
+  the last, none tighter than the bend. Measured at the defaults: rhino (Coarse)
+  3,293 segments / 2,896 bends to 322 / 313, stray mean 1.34 to 1.17 mm; Mona
+  Lisa 17,280 / 14,725 to 2,011 / 1,914. The line grows 5–7%, mostly where the
+  refit rejoins a steered line at full lock by a Dubins path.
+- Steps to get there: a tangent arc through the next point is impossible where
+  the line runs AT the bend and the carried heading is slightly off, so an arc
+  at the bend may end near the point (within tol); then the tolerance is
+  loosened (×2, ×4) for one arc; then a Dubins rejoin; only then a sharp corner
+  (one straight across it, reported). Without these, the steered rings sample
+  had 7 sharp corners; with them none.
+- An arc never spans two kinds (edge / retrace / join), so the lengths by kind
+  stay true, unless a run is too short to turn in.
+- core/marks.js: bends are arcs of 3° or more (gentler ones are a slight curve
+  in a straight); R / L as seen on the page (y down: an increasing angle is
+  clockwise). Ticks carry the TOTAL length. Labels: the tick labels first, on
+  the clear side; each bend label tries 16 spots, the first covering neither
+  the wire nor another label wins, else the one covering least. Dense drawings
+  still crowd (about 300 bends on a 30 cm rhino at 2.5 mm labels): the bend
+  table carries everything regardless.
+- 2026-11-21, the user's choices: distance ticks and bend numbers are separate
+  toggles (preview and Print / PDF); Fewer bends is off by default and lives in
+  the Experimental tab, as on a steered line it gave high-frequency waves (it
+  follows the steering's ripple) rather than broad curves. With it off, a
+  steered line is thousands of tiny arcs, so bend numbers there are dense.
+- 2026-11-21, UI: the sidebar is three tabs, Picture (image, tone, style,
+  canvas, edges & detail), Line (one line, line, smoothing) and Make (figures,
+  marks, output); the Experimental smoothing section shows only with the
+  header's Show experiments switch, and while hidden, any experiment away from
+  its default is named in a note on the Line tab (they still act). Corner loops
+  shows only when the line is not steered (steering is never tight).
+- 2026-11-21, the user's choices: Precision defaults to Rough draft and Fine
+  (2400 px) is gone (a project asking for it gets the default); every Style
+  filter is off by default (Painterly was on); a Tone or Style change shows the
+  Source view and an Edges & detail change the Edges view (app.js showFor); the
+  figures are their own section on the Make tab, collapsed.
+
+## Save files
+
+The app is not released: project files carry no backward compatibility. A
+field the app does not know is ignored and one it cannot use falls back to its
+default with a note, but nothing from an earlier shape of the file is read
+across into a newer one.

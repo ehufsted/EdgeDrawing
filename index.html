@@ -86,6 +86,10 @@
   .seg.wide { flex: 1 1 auto; }
   .seg.wide button { flex: 1 1 0; padding: 4px 6px; }
   .seg button[aria-pressed=true] { background: var(--accent); color: #10131a; font-weight: 600; }
+  /* the sidebar's tabs: Picture, Line, Make */
+  .tabs { margin: 0 0 12px; position: sticky; top: 0; z-index: 1; background: var(--panel); box-shadow: 0 -12px 0 var(--panel); }
+  .tabs button { padding: 7px 6px; font-weight: 600; }
+  details[hidden] { display: none; }
   label.check { color: var(--dim); display: flex; align-items: center; gap: 5px; cursor: pointer; margin: 6px 0; }
   label.check[hidden] { display: none; }
 
@@ -165,6 +169,7 @@
   <h1>EdgeDrawing</h1>
   <span class="sub">image &rarr; one continuous line, for a pen or wire</span>
   <span class="hspacer"></span>
+  <label class="check" style="margin:0" title="show the Experimental smoothing settings on the Line tab"><input type="checkbox" id="showExp"> Show experiments</label>
   <button class="mini" id="resetAll" title="every control back to its default (the image stays)">Reset all</button>
   <button class="mini" id="openProject" title="open a saved project (.edl.json): the image and every setting">Open project…</button>
   <button class="mini" id="saveProject" title="save the image and every setting, to reopen later and get the same drawing">Save project</button>
@@ -173,7 +178,13 @@
 
 <main>
   <aside>
-    <details open>
+    <div class="seg wide tabs" id="sideTabs" role="tablist">
+      <button data-tab="picture" aria-pressed="true" title="the image, its size, and how its edges are found">Picture</button>
+      <button data-tab="line" aria-pressed="false" title="joining the edges into one line, its width and bend, and its smoothing">Line</button>
+      <button data-tab="make" aria-pressed="false" title="the line's figures, marks for making it, and the printout and files">Make</button>
+    </div>
+    <p class="note warn" id="expNote" hidden></p>
+    <details data-tab="picture" open>
       <summary>Image</summary>
       <div class="body">
         <div id="drop">Drop an image, or click to choose</div>
@@ -187,7 +198,7 @@
       </div>
     </details>
 
-    <details>
+    <details data-tab="picture">
       <summary>Tone</summary>
       <div class="body">
         <div class="row">
@@ -209,7 +220,7 @@
       </div>
     </details>
 
-    <details>
+    <details data-tab="picture">
       <summary>Style</summary>
       <div class="body">
         <div id="styleChain"></div>
@@ -217,7 +228,7 @@
       </div>
     </details>
 
-    <details open>
+    <details data-tab="picture" open>
       <summary>Canvas</summary>
       <div class="body">
         <div class="row">
@@ -249,13 +260,12 @@
             <option value="rough">Rough draft (700 px)</option>
             <option value="draft">Draft (1000 px)</option>
             <option value="normal">Normal (1600 px)</option>
-            <option value="fine">Fine (2400 px)</option>
           </select>
         </div>
       </div>
     </details>
 
-    <details open>
+    <details data-tab="picture" open>
       <summary>Edges &amp; detail</summary>
       <div class="body">
         <div class="row">
@@ -295,7 +305,7 @@
       </div>
     </details>
 
-    <details open>
+    <details data-tab="line" open>
       <summary>One line</summary>
       <div class="body">
         <div class="row">
@@ -324,7 +334,7 @@
       </div>
     </details>
 
-    <details open>
+    <details data-tab="line" open>
       <summary>Line</summary>
       <div class="body">
         <div class="row" title="the wire's thickness, or a pen's line">
@@ -347,7 +357,7 @@
       </div>
     </details>
 
-    <details open>
+    <details data-tab="line" open>
       <summary>Smoothing</summary>
       <div class="body">
         <div class="row" title="how the whole line is smoothed before it is drawn as straights and arcs">
@@ -389,7 +399,7 @@
       </div>
     </details>
 
-    <details>
+    <details data-tab="line" id="expDetails" open>
       <summary>Experimental smoothing</summary>
       <div class="body">
         <div class="row" title="joins are not in the image, so they can take any shape: as Dubins paths they leave and meet the strokes tangentially, never tighter than the bend">
@@ -421,21 +431,45 @@
             <option value="tight">Only where tighter than the bend</option>
           </select>
         </div>
-        <p class="note">These act only with a smallest bend above 0; merge and cut keep within the stray above. The figures show how many places stay tight and how far the line strays from the edges.</p>
+        <div class="row" title="the finished line refitted as the fewest arcs that stay within this of it, none tighter than the smallest bend: far fewer bends, though steered lines tend to come out wavy; 0 = off">
+          <label for="bendTol">Fewer bends, within</label>
+          <input type="number" id="bendTol" class="len" min="0" step="any">
+          <span class="unit u"></span>
+        </div>
+        <p class="note">These act only with a smallest bend above 0 (Fewer bends works without one); merge and cut keep within the stray above. The figures show how many places stay tight and how far the line strays from the edges.</p>
       </div>
     </details>
 
-    <details open>
-      <summary>The line &amp; output</summary>
+    <details data-tab="make" open>
+      <summary>Marks &amp; output</summary>
       <div class="body">
-        <table class="figs" id="figs"></table>
+        <label class="check" title="on the preview: a bar across the line every tick spacing, with the total length so far"><input type="checkbox" id="ticks"> Show distance ticks</label>
+        <label class="check" title="on the preview: each bend numbered in drawing order with its turn (R or L, degrees), a bar where it starts"><input type="checkbox" id="bendNums"> Show bend numbers</label>
+        <div class="row">
+          <label for="tickMm">Ticks every</label>
+          <input type="number" id="tickMm" class="len" min="5" step="any">
+          <span class="unit u"></span>
+        </div>
+        <div class="row">
+          <label for="markSize">Label size</label>
+          <input type="number" id="markSize" class="len" min="0.5" max="20" step="any">
+          <span class="unit u"></span>
+        </div>
         <p class="note warn" id="notes"></p>
         <div class="buttons">
           <button class="primary" id="printPlan" title="a printable page: figures, the whole drawing, and a 1:1 template across pages; save it as PDF from the print dialog">Print / PDF…</button>
           <button id="exportSvg" title="the line at true size, one path">Drawing SVG</button>
           <button id="exportPng">PNG</button>
+          <button id="exportBends" title="every bend: where it starts along the line, its turn, radius and arc length">Bend table CSV</button>
         </div>
         <p class="note">Wire bending instructions (a nail or peg layout, a bend table) are planned: see docs/TODO.md.</p>
+      </div>
+    </details>
+
+    <details data-tab="make">
+      <summary>Figures</summary>
+      <div class="body">
+        <table class="figs" id="figs"></table>
       </div>
     </details>
   </aside>
@@ -484,6 +518,9 @@
   <label class="check"><input type="checkbox" id="pSummary" checked> Figures and preview</label>
   <label class="check"><input type="checkbox" id="pFit" checked> Whole drawing, scaled to one page</label>
   <label class="check"><input type="checkbox" id="pTemplate" checked> Template at 1:1 (split across pages if needed)</label>
+  <label class="check" style="margin-left:22px"><input type="checkbox" id="pTicks" checked> With distance ticks</label>
+  <label class="check" style="margin-left:22px"><input type="checkbox" id="pBendNums" checked> With bend numbers</label>
+  <label class="check"><input type="checkbox" id="pBends" checked> Bend table</label>
   <p class="note" id="printNote"></p>
   <div class="buttons"><button class="primary" id="printGo">Open printable page</button><button id="printClose">Cancel</button></div>
 </dialog>

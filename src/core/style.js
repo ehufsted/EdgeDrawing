@@ -90,10 +90,10 @@ export const FILTERS = [medianFilter, blurFilter, claheFilter, sharpenFilter, ku
 export const filterById = (id) => FILTERS.find((f) => f.id === id);
 export const defaultsOf = (f) => Object.fromEntries(f.params.map((p) => [p.key, p.def]));
 
-/** The default style: every filter in its order, only Painterly on. */
+/** The default style: every filter in its order, all off (the image as it is). */
 export const defaultStyle = () => ({
   order: FILTERS.map((f) => f.id),
-  on: Object.fromEntries(FILTERS.map((f) => [f.id, f.id === 'kuwahara'])),
+  on: Object.fromEntries(FILTERS.map((f) => [f.id, false])),
   params: Object.fromEntries(FILTERS.map((f) => [f.id, defaultsOf(f)])),
 });
 
