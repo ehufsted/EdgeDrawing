@@ -68,6 +68,12 @@ export function run() {
   check('defaults: the line is steered, one continuous tangent line, no arc under the 3 mm bend, nothing tight',
     pd.path.segs.length > 10 && pdc.gap < 1e-3 && pdc.kinks === 0 && pdr.every((r) => r >= 3 - 1e-6) && pd.tight.length === 0,
     `${num(pd.stats.length, 0)} mm, tightest ${num(Math.min(...pdr), 2)} mm, stray ${num(pd.stats.strayMax, 2)} / ${num(pd.stats.strayMean, 2)} mm, ${pdc.kinks} kinks, ${pd.tight.length} tight, ${pd.stats.bends} bends`);
+  // Fewer bends keeps each kind's length: no arc spans more than a short run into the next
+  const r0 = runPipeline(rings, { widthMm: 200, precision: 'rough', minRadius: 3 }, {});
+  const r1 = runPipeline(rings, { widthMm: 200, precision: 'rough', minRadius: 3, bendTol: 0.5 }, {});
+  const rc = continuity(r1.path, 0.01);
+  check('Fewer bends on the steered rings: far fewer segments, tangent, the joins\' length within 10%', r1.path.segs.length < r0.path.segs.length / 3 && rc.kinks <= r1.stats.sharp && Math.abs(r1.stats.join - r0.stats.join) <= 0.1 * r0.stats.join,
+    `${r0.path.segs.length} → ${r1.path.segs.length} segments, join ${num(r0.stats.join, 0)} → ${num(r1.stats.join, 0)} mm`);
   const pc = runPipeline(rings, { ...base, closed: true }, {});
 let refusedNeg = '';  try { runPipeline(rings, { ...base, maxStray: -1 }, {}); } catch (e) { refusedNeg = e.message; }  check('a negative stray is refused, not used', refusedNeg === 'lengths cannot be negative', refusedNeg);
   check('closed: ends where it starts', Math.hypot(pc.start.x - pc.end.x, pc.start.y - pc.end.y) < 1e-6, '');

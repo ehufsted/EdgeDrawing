@@ -449,12 +449,12 @@
         <label class="check" title="on the preview: each bend numbered in drawing order with its turn (R or L, degrees), a bar where it starts"><input type="checkbox" id="bendNums"> Show bend numbers</label>
         <div class="row">
           <label for="tickMm">Ticks every</label>
-          <input type="number" id="tickMm" class="len" min="1" step="any">
+          <input type="number" id="tickMm" class="len" min="5" step="any">
           <span class="unit u"></span>
         </div>
         <div class="row">
           <label for="markSize">Label size</label>
-          <input type="number" id="markSize" class="len" min="0.5" step="any">
+          <input type="number" id="markSize" class="len" min="0.5" max="20" step="any">
           <span class="unit u"></span>
         </div>
         <p class="note warn" id="notes"></p>

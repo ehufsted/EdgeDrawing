@@ -51,6 +51,8 @@ export function run() {
     /font-weight="bold">\d+</.test(onlyBends) && !/\d+ cm<\/text>/.test(onlyBends), '');
   const oldMarks = parseProject({ app: 'EdgeDrawing', version: 1, display: { marks: true } }).project.display;
   check('project: an old single marks switch turns on both', oldMarks.ticks === true && oldMarks.bendNums === true, JSON.stringify(oldMarks));
+  const tiny = parseProject({ app: 'EdgeDrawing', version: 1, display: { tickMm: 0.05, markSize: 500 } }).project.display;
+  check('project: a tick spacing under 5 mm and a label over 20 mm fall back to the defaults', tiny.tickMm === 100 && tiny.markSize === 2.5, JSON.stringify(tiny));
 
   // a project round trip, and bad input mended with reasons
   const s = { ...DEFAULTS, widthMm: 250, join: 'tsp', oddJoin: 'new', start: { x: 10, y: 20 }, closed: true, pidD: 1.5, loops: true, style: defaultStyle() };

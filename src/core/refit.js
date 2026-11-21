@@ -140,8 +140,9 @@ export function refitPath(path, o) {
     let first = -1, a = null;
     for (let j = i + 1; j <= Math.min(end, i + reach); j++) { a = arcTo(i, j); if (a) { first = j; break; } }
     if (!a && end < n - 1) {
-      // a run of one kind too short to turn in: this one arc may cross into the next
-      end = n - 1;
+      // a run of one kind too short to turn in: this one arc may cross into the
+      // NEXT run (no farther: its kind is its end's, which must stay close to true)
+      end = runEnd[end];
       for (let j = i + 1; j <= Math.min(end, i + reach); j++) { a = arcTo(i, j); if (a) { first = j; break; } }
     }
     // still none: where the line runs at the bend, an arc that came in a little off

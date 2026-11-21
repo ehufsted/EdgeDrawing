@@ -18,7 +18,7 @@ import { planHTML, PAPERS, pageWindows, printable, fmtLen, longText } from './co
 import { projectJSON, parseProject, DISPLAY } from './core/project.js';
 import { filterById, defaultStyle } from './core/style.js';
 import { trimPath } from './core/arcs.js';
-import { layoutMarks, bendList, bendText, bendCSV, alongText, MIN_BEND } from './core/marks.js';
+import { layoutMarks, bendList, bendText, bendCSV, alongText, MIN_BEND, TICK_MIN, LABEL_MIN, LABEL_MAX } from './core/marks.js';
 import { generateSample } from './app/samples.js';
 
 const $ = (id) => document.getElementById(id);
@@ -1030,10 +1030,19 @@ function bindDisplay() {
     });
   }
   for (const id of ['ticks', 'bendNums']) $(id).addEventListener('change', () => { state.disp[id] = $(id).checked; save(); paint(); });
+  // ticks no closer than TICK_MIN (a tiny spacing, typed on the way to a larger
+  // one, would lay out thousands of labels at every keystroke); labels in range
+  const ok = { tickMm: (v) => v >= TICK_MIN, markSize: (v) => v >= LABEL_MIN && v <= LABEL_MAX };
+  const clampTo = { tickMm: (v) => Math.max(TICK_MIN, v), markSize: (v) => Math.min(LABEL_MAX, Math.max(LABEL_MIN, v)) };
   for (const id of DISP_LEN_IDS) {
+    $(id).addEventListener('change', () => {
+      const v = toMm(parseFloat($(id).value), state.units);
+      if (isFinite(v) && v > 0 && !ok[id](v)) { state.disp[id] = clampTo[id](v); save(); paint(); }
+      $(id).value = L(state.disp[id]);
+    });
     $(id).addEventListener('input', () => {
       const v = toMm(parseFloat($(id).value), state.units);
-      if (!(v > 0)) return;
+      if (!(v > 0) || !ok[id](v)) return;
       state.disp[id] = v;
       save();
       paint();

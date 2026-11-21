@@ -22,7 +22,7 @@
 
 import { pathD, markersSVG, fmt, escapeXml } from './svg.js';
 import { fromMm } from './units.js';
-import { layoutMarks, marksSVG, bendText, alongText, bendList } from './marks.js';
+import { layoutMarks, marksSVG, bendText, alongText, bendList, TICK_MIN, LABEL_MIN, LABEL_MAX } from './marks.js';
 
 export const PAPERS = {
   letter: { w: 215.9, h: 279.4, label: 'Letter' },
@@ -90,7 +90,7 @@ export function planHTML(plan, opts = {}) {
     `<section class="page"><div class="cap">${escapeXml(caption)}</div><div class="body">${body}</div></section>`);
   // the making marks (core/marks.js): ticks and numbered bends, on the 1:1 pages
   const onPage = !!(opts.ticks || opts.bendNums);
-  const made = onPage ? layoutMarks(plan.path, opts.tickMm || 100, opts.markSize || 2.5, lw, units, { ticks: !!opts.ticks, bends: !!opts.bendNums }) : null;
+  const made = onPage ? layoutMarks(plan.path, Math.max(TICK_MIN, opts.tickMm || 100), Math.min(LABEL_MAX, Math.max(LABEL_MIN, opts.markSize || 2.5)), lw, units, { ticks: !!opts.ticks, bends: !!opts.bendNums }) : null;
   const table = opts.bendTable ? bendList(plan.path) : null;
   const view = (x0, y0, w, h, k, css, withMarks = false) =>
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(x0)} ${fmt(y0)} ${fmt(w)} ${fmt(h)}" style="--edl-lw:${fmt(Math.max(lw, MIN_LINE / k))};${css}">` +

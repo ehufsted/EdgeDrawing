@@ -15,6 +15,9 @@
 
 export const MIN_BEND = 3;   // degrees
 
+/** The marks' sizes are held to these: ticks no closer than TICK_MIN mm (closer would bury the line in thousands of labels), labels LABEL_MIN to LABEL_MAX mm. */
+export const TICK_MIN = 5, LABEL_MIN = 0.5, LABEL_MAX = 20;
+
 const segLen = (s, x, y) => (s.k === 'L' ? Math.hypot(s.x - x, s.y - y) : s.r * Math.abs(s.sweep));
 
 /**

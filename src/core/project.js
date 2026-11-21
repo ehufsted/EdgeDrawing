@@ -18,6 +18,7 @@
 import { normalizeHex } from './color.js';
 import { DEFAULTS, PRECISION, PID_D_MAX } from './units.js';
 import { normalizeStyle } from './style.js';
+import { TICK_MIN, LABEL_MIN, LABEL_MAX } from './marks.js';
 
 export const PROJECT_VERSION = 1;
 export const APP = 'EdgeDrawing';
@@ -95,7 +96,8 @@ export function parseProject(json) {
     // one 'marks' switch, from before the two were separate, sets both
     ticks: typeof d.ticks === 'boolean' ? d.ticks : typeof d.marks === 'boolean' ? d.marks : DISPLAY.ticks,
     bendNums: typeof d.bendNums === 'boolean' ? d.bendNums : typeof d.marks === 'boolean' ? d.marks : DISPLAY.bendNums,
-    tickMm: pos(d.tickMm, DISPLAY.tickMm), markSize: pos(d.markSize, DISPLAY.markSize),
+    tickMm: pos(d.tickMm, DISPLAY.tickMm) >= TICK_MIN ? pos(d.tickMm, DISPLAY.tickMm) : DISPLAY.tickMm,
+    markSize: pos(d.markSize, DISPLAY.markSize) >= LABEL_MIN && pos(d.markSize, DISPLAY.markSize) <= LABEL_MAX ? pos(d.markSize, DISPLAY.markSize) : DISPLAY.markSize,
   };
   return { project: { image, units: o.units === 'in' ? 'in' : 'mm', settings, display }, problems };
 }
