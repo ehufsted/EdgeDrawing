@@ -49,12 +49,10 @@ export function run() {
   const onlyBends = planHTML(zplan, { paper: 'letter', summary: false, fit: false, bendNums: true, tickMm: 50 });
   check('...ticks alone: the tick labels, no bend numbers; bend numbers alone: no tick labels', /\d+ cm<\/text>/.test(onlyTicks) && !/font-weight="bold">\d+</.test(onlyTicks) &&
     /font-weight="bold">\d+</.test(onlyBends) && !/\d+ cm<\/text>/.test(onlyBends), '');
-  const oldMarks = parseProject({ app: 'EdgeDrawing', version: 1, display: { marks: true } }).project.display;
-  check('project: an old single marks switch turns on both', oldMarks.ticks === true && oldMarks.bendNums === true, JSON.stringify(oldMarks));
   const tiny = parseProject({ app: 'EdgeDrawing', version: 1, display: { tickMm: 0.05, markSize: 500 } }).project.display;
   check('project: a tick spacing under 5 mm and a label over 20 mm fall back to the defaults', tiny.tickMm === 100 && tiny.markSize === 2.5, JSON.stringify(tiny));
-  const fine = parseProject({ app: 'EdgeDrawing', version: 1, settings: { precision: 'fine' } });
-  check('project: Fine precision (gone) opens at Normal, with a note', fine.project.settings.precision === 'normal' && fine.problems.some((p) => /Fine/.test(p)), fine.problems.join('; '));
+  const badPrec = parseProject({ app: 'EdgeDrawing', version: 1, settings: { precision: 'huge' } });
+  check('project: an unknown precision opens at the default, with a note', badPrec.project.settings.precision === DEFAULTS.precision && badPrec.problems.some((p) => /precision/.test(p)), badPrec.problems.join('; '));
 
   // a project round trip, and bad input mended with reasons
   const s = { ...DEFAULTS, widthMm: 250, join: 'tsp', oddJoin: 'new', start: { x: 10, y: 20 }, closed: true, pidD: 1.5, loops: true, style: defaultStyle() };
@@ -65,9 +63,6 @@ export function run() {
   const bad = parseProject({ app: 'EdgeDrawing', version: 1, settings: { widthMm: -3, join: 'zigzag', minRadius: 'x', pidD: 3 } });
   check('project: unusable values fall back to defaults, each with a reason', bad.project.settings.widthMm === DEFAULTS.widthMm && bad.project.settings.join === DEFAULTS.join && bad.project.settings.pidD === DEFAULTS.pidD && bad.problems.length >= 4,
     bad.problems.join('; '));
-  const old = parseProject({ app: 'EdgeDrawing', version: 1, settings: { bendFix: 'fourier', fourierScale: 20 } });
-  check('project: a smoothing saved as a tight-corner fix comes back as the smoothing', old.project.settings.smoothing === 'fourier' && old.project.settings.bendFix === 'none' && old.project.settings.fourierScale === 20,
-    `${old.project.settings.smoothing}, ${old.project.settings.bendFix}`);
   let refused = false;
   try { parseProject({ app: 'PaintByNumbers', version: 1 }); } catch { refused = true; }
   check('project: another app\'s file is refused', refused, '');

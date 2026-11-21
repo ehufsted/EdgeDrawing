@@ -467,7 +467,7 @@ export function fourierLine(pts, kinds, lambda, R) {
  *   e  = the heading error to that point (radians)
  *   κ  = (P·e + D·look·de/ds) / look,   capped at ±1/R
  *
- * a PD controller (the id is still 'pid'). P = 2 is pure pursuit's geometry
+ * a PD controller (its setting is still called 'pid'). P = 2 is pure pursuit's geometry
  * (the arc through the target point); D damps the swing out of a turn. There is
  * no integral term: tried (I 0.3, with D raised to 1 in the same run), the
  * stray moved by under 10%; it was taken out at the user's request. At a dead

@@ -155,8 +155,7 @@ The user found the PID steering best (about P 1, I 0, D 1, varying the look
 ahead) and Fourier stylistically interesting. So `smoothing` is now its own
 setting for the whole line, 'pid' by default (look ahead 4 mm), with 'fourier',
 'optimize' (relax) and 'none'; Dubins joins, the paired walk, merge / remove and
-tight-only edge smoothing moved to the Experimental smoothing tab. Projects
-saved with a smoothing under `bendFix` are read into `smoothing`.
+tight-only edge smoothing moved to the Experimental smoothing tab.
 
 - A pen (no bend) still caps the steering at a quarter of the look ahead:
   uncapped, the controller swung at the scale of one step (the Mona Lisa came
@@ -167,8 +166,7 @@ saved with a smoothing under `bendFix` are read into `smoothing`.
 - Seen at 4× in pen mode: a faint ripple on some steered strokes; P, D or the
   step length could calm it.
 - The integral term was removed at the user's request (2026-11-19): the steering
-  is a PD controller, P 1 and D 1 by default. (The setting keeps its id 'pid',
-  so projects open unchanged; a saved I gain is ignored.)
+  is a PD controller, P 1 and D 1 by default (the setting is still called 'pid').
 - The pen / wire choice was removed at the user's request: the defaults are the
   wire's (1.2 mm, 3 mm bend), and D is capped at 2 (PID_D_MAX). Stray against D
   with a 3 mm bend (draft precision): Mona Lisa mean 1.12 / 1.15 / 1.25 / 2.03 /
@@ -215,3 +213,10 @@ Asked for: fewer bends, distance ticks, numbered bends; tool-agnostic.
   filter is off by default (Painterly was on); a Tone or Style change shows the
   Source view and an Edges & detail change the Edges view (app.js showFor); the
   figures are their own section on the Make tab, collapsed.
+
+## Save files
+
+The app is not released: project files carry no backward compatibility. A
+field the app does not know is ignored and one it cannot use falls back to its
+default with a note, but nothing from an earlier shape of the file is read
+across into a newer one.

@@ -66,9 +66,7 @@ export function parseProject(json) {
   else if (im.kind === 'file' && typeof im.dataURL === 'string' && /^data:image\//.test(im.dataURL)) image = { kind: 'file', name: String(im.name || 'image'), dataURL: im.dataURL };
   else problems.push('no usable image in the project');
 
-  const src = o.settings && typeof o.settings === 'object' ? { ...o.settings } : {};
-  // saved while the line smoothings were tight-corner fixes: they are the smoothing now
-  if (['pid', 'fourier', 'optimize'].includes(src.bendFix) && src.smoothing === undefined) { src.smoothing = src.bendFix; src.bendFix = 'none'; }
+  const src = o.settings && typeof o.settings === 'object' ? o.settings : {};
   const settings = { ...DEFAULTS };
   for (const [k, ok] of Object.entries(NUMS)) {
     if (src[k] === undefined) continue;
@@ -87,18 +85,15 @@ export function parseProject(json) {
   const ns = normalizeStyle(src.style);
   settings.style = ns.style;
   problems.push(...ns.problems);
-  // Fine (2400 px) is gone: the nearest left is Normal; anything else unknown is noted
-  if (src.precision === 'fine') { settings.precision = 'normal'; problems.push('precision Fine is no longer offered: using Normal (1600 px)'); }
-  else if (src.precision === undefined || PRECISION[src.precision]) settings.precision = src.precision ?? DEFAULTS.precision;
+  if (src.precision === undefined || PRECISION[src.precision]) settings.precision = src.precision ?? DEFAULTS.precision;
   else { settings.precision = DEFAULTS.precision; problems.push(`precision: unusable, using ${DEFAULTS.precision}`); }
 
   const d = o.display && typeof o.display === 'object' ? o.display : {};
   const pos = (v, def) => (isFinite(Number(v)) && Number(v) > 0 ? Number(v) : def);
   const display = {
     ink: normalizeHex(d.ink) || DISPLAY.ink, paper: normalizeHex(d.paper) || DISPLAY.paper,
-    // one 'marks' switch, from before the two were separate, sets both
-    ticks: typeof d.ticks === 'boolean' ? d.ticks : typeof d.marks === 'boolean' ? d.marks : DISPLAY.ticks,
-    bendNums: typeof d.bendNums === 'boolean' ? d.bendNums : typeof d.marks === 'boolean' ? d.marks : DISPLAY.bendNums,
+    ticks: typeof d.ticks === 'boolean' ? d.ticks : DISPLAY.ticks,
+    bendNums: typeof d.bendNums === 'boolean' ? d.bendNums : DISPLAY.bendNums,
     tickMm: pos(d.tickMm, DISPLAY.tickMm) >= TICK_MIN ? pos(d.tickMm, DISPLAY.tickMm) : DISPLAY.tickMm,
     markSize: pos(d.markSize, DISPLAY.markSize) >= LABEL_MIN && pos(d.markSize, DISPLAY.markSize) <= LABEL_MAX ? pos(d.markSize, DISPLAY.markSize) : DISPLAY.markSize,
   };
