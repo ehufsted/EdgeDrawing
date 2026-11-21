@@ -15,6 +15,14 @@ or a length of wire can be bent to.
   at about half of it. *Shortest line*: shorter lines, side branches and loose
   pieces are left out. *Simplify*: how far the simplified line may stray from
   the traced edge. Fine / Medium / Coarse set all five.
+- **Edit edges** (Picture tab): *Erase* cuts away every edge within the eraser's
+  radius of a stroke dragged on the preview; *Draw* adds a new edge along the
+  stroke, an end that starts or stops on an edge joining it. Edits apply to the
+  edges before they are joined, so the one line, its smoothing, bends and marks
+  all follow; they are kept as strokes in mm and applied again whenever the
+  settings change, with Undo / Redo (Ctrl+Z / Ctrl+Y) and Clear, and saved in
+  projects. A new image starts without them. The Edges view shows drawn edges in
+  green.
 - **One line**, two ways:
   - *Trace through (Eulerian)* draws every edge without lifting. Separate pieces
     are joined by the shortest bridges (preferring loose ends, which chains

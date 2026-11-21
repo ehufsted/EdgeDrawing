@@ -54,7 +54,9 @@ smoothing, merge / remove / optimize; see docs/architecture.md for the numbers.
 - "Aim for N m of line" / N bends: scale the detail limits together to a target,
   as PaintByNumbers' "Aim for N regions".
 - A finer-detail subject area (faces).
-- Hand edits: drag the start, delete or add strokes, reroute a bridge; stored in mm.
+- Hand edits: erase and draw edges are DONE (core/edits.js). Still open: reject a
+  join (the router picks the next best), pin the end, and a "lock the line"
+  mode to reshape the finished line directly.
 - Tone methods for the registry: TSP stipple art, squiggle / spiral (amplitude
   modulated), Hilbert curve.
 - G-code export for pen plotters.

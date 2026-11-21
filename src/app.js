@@ -39,7 +39,8 @@ const DETAIL = {
 /** What the line is doing, as the Route view colours it. */
 const KIND = { edge: '#1a1a1a', retrace: '#e08a00', join: '#2a6fdb' };
 
-const freshSettings = () => ({ ...DEFAULTS, start: null, style: defaultStyle() });
+// fresh arrays every time: Reset must never hand out DEFAULTS' own (edits are pushed into in place)
+const freshSettings = () => ({ ...DEFAULTS, start: null, edits: [], style: defaultStyle() });
 
 const state = {
   rgba: null,           // {width, height, data} as loaded
@@ -70,7 +71,7 @@ window.edgeDrawing = state;   // for driving the app from DevTools / the CDP har
 function save() {
   try {
     // the start point belongs to one image, so it is not kept here (a project keeps it)
-    localStorage.setItem(STORE, JSON.stringify({ units: state.units, preset: state.preset, s: { ...state.s, start: null }, disp: state.disp, tab: state.tab, showExp: state.showExp }));
+    localStorage.setItem(STORE, JSON.stringify({ units: state.units, preset: state.preset, s: { ...state.s, start: null, edits: [] }, disp: state.disp, tab: state.tab, showExp: state.showExp }));
   } catch { /* storage unavailable */ }
 }
 
@@ -140,6 +141,7 @@ function onWorkerMessage(ev) {
     updateStats();
     renderFigures();
     renderStartNote();
+    renderEditNote();
   }
 }
 
@@ -188,6 +190,7 @@ const unitLabel = () => (state.units === 'in' ? 'in' : 'mm');
 function showLengths() {
   for (const id of LEN_IDS) $(id).value = L(state.s[id]);
   for (const id of DISP_LEN_IDS) $(id).value = L(state.disp[id]);
+  $('eraserMm').value = L(edit.eraserMm);
   for (const el of document.querySelectorAll('.u')) el.textContent = unitLabel();
   for (const b of document.querySelectorAll('#unitSeg button')) b.setAttribute('aria-pressed', String(b.dataset.units === state.units));
   $('edgeAmount').value = state.s.edgeAmount;
@@ -489,9 +492,17 @@ function drawEdges(ctx, plan, k) {
   drawPaper(ctx, plan, '#ffffff');
   ctx.strokeStyle = '#333333';
   lineStyle(ctx, k, 1.2 / k);
-  const p = new Path2D();
-  for (const e of plan.graph.edges) { p.moveTo(e[0], e[1]); for (let i = 2; i < e.length; i += 2) p.lineTo(e[i], e[i + 1]); }
+  const drawn = new Set(plan.graph.drawn || []);
+  const p = new Path2D(), q = new Path2D();
+  plan.graph.edges.forEach((e, i) => {
+    const t = drawn.has(i) ? q : p;
+    t.moveTo(e[0], e[1]);
+    for (let j = 2; j < e.length; j += 2) t.lineTo(e[j], e[j + 1]);
+  });
   ctx.stroke(p);
+  ctx.strokeStyle = '#1a9e3a';   // drawn by hand
+  lineStyle(ctx, k, 2 / k);
+  ctx.stroke(q);
   const r = Math.max(0.4, 2.2 / k);
   for (const n of plan.graph.nodes) {
     if (n.deg === 2) continue;
@@ -582,7 +593,7 @@ const HINTS = {
   drawing: 'the drawing: one line, at its true width',
   route: 'black: the image\'s edges · orange: over a line again · blue: not in the image (bridges, joins, jumps) · green ring: start · red square: end',
   overlay: 'the line over the image',
-  edges: 'the edges found, before joining · orange: loose ends · blue: junctions',
+  edges: 'the edges found, before joining · orange: loose ends · blue: junctions · green: drawn by hand',
   source: 'the image after Tone and Style, as its edges are found',
   problems: 'red rings: corners tighter than the smallest bend · orange dots: crossings · blue: not in the image',
 };
@@ -650,6 +661,121 @@ function bindAnim() {
   $('progress').addEventListener('input', () => { stopAnim(); setProgress(parseInt($('progress').value, 10) / 1000); });
 }
 
+// ------------------------------------------------------------- edit edges
+// Hand edits (core/edits.js) live in state.s.edits, so they reach the worker,
+// projects and Reset with the other settings; the redo stack is the session's.
+// They belong to one image: a new image starts with none (a project brings its own).
+const edit = { tool: 'off', eraserMm: 3, redo: [], stroke: null };
+state.edit = edit;   // for driving the app from DevTools / the CDP harness
+
+const EDIT_HELP = {
+  off: 'Pick a tool, then drag on the preview. Edits are applied again whenever the settings change, and saved in projects.',
+  erase: 'Drag over edges to cut them away (the Edges view shows what is left).',
+  draw: 'Drag to draw a new edge. An end that starts or stops on an edge joins it.',
+};
+
+function setTool(t) {
+  edit.tool = t;
+  for (const b of document.querySelectorAll('#editSeg button')) b.setAttribute('aria-pressed', String(b.dataset.tool === t));
+  $('eraserRow').hidden = t !== 'erase';
+  if (t !== 'off') { setPicking(false); showFor('edges'); }
+  $('view').style.cursor = t === 'off' ? 'crosshair' : 'cell';
+  renderEditNote();
+}
+
+function renderEditNote() {
+  const n = state.s.edits.length, plan = state.plan;
+  const idle = plan && plan.stats.edits !== undefined && n > plan.stats.edits ? ` (${n - plan.stats.edits} changed nothing)` : '';
+  $('editNote').textContent = `${EDIT_HELP[edit.tool]} ${n ? `${n} ${n === 1 ? 'edit' : 'edits'}${idle}.` : ''}`;
+  $('undoEdit').disabled = !n;
+  $('redoEdit').disabled = !edit.redo.length;
+  $('clearEdits').disabled = !n;
+}
+
+function pushEdit(e) {
+  state.s.edits.push(e);
+  edit.redo = [];
+  renderEditNote();
+  scheduleRun(0);
+}
+
+function undoEdit() {
+  if (!state.s.edits.length) return;
+  edit.redo.push(state.s.edits.pop());
+  renderEditNote();
+  scheduleRun(0);
+}
+
+function redoEdit() {
+  if (!edit.redo.length) return;
+  state.s.edits.push(edit.redo.pop());
+  renderEditNote();
+  scheduleRun(0);
+}
+
+function bindEdits() {
+  for (const b of document.querySelectorAll('#editSeg button')) b.addEventListener('click', () => setTool(b.dataset.tool));
+  $('undoEdit').addEventListener('click', undoEdit);
+  $('redoEdit').addEventListener('click', redoEdit);
+  $('clearEdits').addEventListener('click', () => {
+    if (!state.s.edits.length) return;
+    // Redo pops from the end: the cleared edits go on top, first edit last, so Redo
+    // brings them back in their order
+    edit.redo = edit.redo.concat(state.s.edits.slice().reverse());
+    state.s.edits = [];
+    renderEditNote();
+    scheduleRun(0);
+  });
+  $('eraserMm').addEventListener('input', () => { const v = toMm(parseFloat($('eraserMm').value), state.units); if (v > 0) edit.eraserMm = v; });
+  document.addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey || e.metaKey) || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
+    const k = e.key.toLowerCase();
+    if (k === 'z' && !e.shiftKey) { e.preventDefault(); undoEdit(); }
+    else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); redoEdit(); }
+  });
+  // a stroke: drawn live on the preview, kept as an edit when the pointer lifts
+  const canvas = $('view');
+  const at = (e) => {
+    const r = canvas.getBoundingClientRect(), plan = state.plan;
+    return [((e.clientX - r.left) / r.width) * plan.piece.W, ((e.clientY - r.top) / r.height) * plan.piece.H];
+  };
+  const ink = () => {
+    const ctx = canvas.getContext('2d');
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    if (edit.tool === 'erase') { ctx.strokeStyle = '#e0303f66'; ctx.lineWidth = 2 * edit.eraserMm; } else { ctx.strokeStyle = '#1a9e3a'; ctx.lineWidth = Math.max(0.4, state.s.lineWidth); }
+    return ctx;
+  };
+  canvas.addEventListener('pointerdown', (e) => {
+    if (edit.tool === 'off' || !state.plan || e.button !== 0) return;
+    const [x, y] = at(e);
+    edit.stroke = [r3(x), r3(y)];
+    canvas.setPointerCapture(e.pointerId);
+    const ctx = ink();
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 1e-3, y); ctx.stroke();
+    e.preventDefault();
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!edit.stroke) return;
+    const [x, y] = at(e), p = edit.stroke;
+    const lx = p[p.length - 2], ly = p[p.length - 1];
+    // enough points to follow the hand, few enough to keep
+    if (Math.hypot(x - lx, y - ly) < (edit.tool === 'erase' ? edit.eraserMm / 3 : 0.4)) return;
+    p.push(r3(x), r3(y));
+    const ctx = ink();
+    ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(x, y); ctx.stroke();
+  });
+  const finish = () => {
+    if (!edit.stroke) return;
+    const pts = edit.stroke;
+    edit.stroke = null;
+    if (edit.tool === 'erase') pushEdit({ op: 'erase', r: r3(edit.eraserMm), pts });
+    else if (pts.length >= 4) pushEdit({ op: 'draw', pts });
+    else paint();   // a click with the pencil draws nothing
+  };
+  canvas.addEventListener('pointerup', finish);
+  canvas.addEventListener('pointercancel', finish);
+}
+
 // --------------------------------------------------------------- the canvas
 function bindCanvas() {
   const canvas = $('view');
@@ -664,7 +790,7 @@ function bindCanvas() {
   });
   canvas.addEventListener('mouseleave', () => { $('hint').textContent = HINTS[state.view] || ''; });
   canvas.addEventListener('click', (e) => {
-    if (!state.plan || !state.picking) return;
+    if (!state.plan || !state.picking || edit.tool !== 'off') return;
     const [x, y] = at(e);
     state.s.start = { x: r3(x), y: r3(y) };
     setPicking(false);
@@ -808,7 +934,7 @@ function loadImage(url, maxDim = 4000) {
 }
 
 function setImage(rgba, name, src, keepStart = false) {
-  if (!keepStart) state.s.start = null;
+  if (!keepStart) { state.s.start = null; state.s.edits = []; edit.redo = []; }
   stopAnim();
   state.anim.t = 1;
   $('progress').value = '1000';
@@ -911,6 +1037,7 @@ async function applyProject(p, problems) {
 function resetControls() {
   if (!window.confirm('Reset every control to its default?\n\nThe image stays; the start point is cleared.')) return;
   state.preset = 'custom';
+  edit.redo = [];
   applySettings('mm', freshSettings(), { ...DISPLAY });
   $('zoom').value = '1';
   setView('drawing');
@@ -1081,6 +1208,8 @@ function init() {
   bindDisplay();
   bindViews();
   bindTabs();
+  bindEdits();
+  setTool('off');
   bindAnim();
   bindCanvas();
   bindExports();

@@ -220,3 +220,18 @@ The app is not released: project files carry no backward compatibility. A
 field the app does not know is ignored and one it cannot use falls back to its
 default with a note, but nothing from an earlier shape of the file is read
 across into a newer one.
+
+## Editing (2026-11-21)
+
+The user chose to edit the EDGES (my recommendation, option 1 of three: edges,
+how pieces are joined, the finished line). core/edits.js applies the strokes
+in settings.edits to the cleaned graph in a stage E between B (edges) and C
+(route), so everything after it follows and the stage cache re-runs only E on.
+Erase: edges near the stroke are resampled finely, the points within r dropped,
+the runs left become edges (cut ends are new loose ends). Draw: the stroke is
+smoothed lightly and simplified like an edge; each end within SNAP (2 mm, or
+the smallest feature) of an edge joins it, at a node within half that, else by
+splitting the edge at the nearest point. Ends are resolved one after the other
+(the second sees the first's split), and never against the new line itself.
+Edits belong to one image (cleared with a new one, kept in projects, not in
+the browser's stored settings).

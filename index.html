@@ -305,6 +305,30 @@
       </div>
     </details>
 
+    <details data-tab="picture" open>
+      <summary>Edit edges</summary>
+      <div class="body">
+        <div class="row">
+          <div class="seg wide" id="editSeg" title="drag on the preview to erase edges or draw new ones; the line is joined through them">
+            <button data-tool="off" aria-pressed="true">Off</button>
+            <button data-tool="erase" aria-pressed="false">Erase</button>
+            <button data-tool="draw" aria-pressed="false">Draw</button>
+          </div>
+        </div>
+        <div class="row" id="eraserRow" title="the eraser's radius: every edge within it of the stroke is cut away">
+          <label for="eraserMm">Eraser size</label>
+          <input type="number" id="eraserMm" class="len" min="0.5" step="any">
+          <span class="unit"><span class="u"></span> radius</span>
+        </div>
+        <div class="buttons">
+          <button class="mini" id="undoEdit" title="Ctrl+Z">Undo</button>
+          <button class="mini" id="redoEdit" title="Ctrl+Y">Redo</button>
+          <button class="mini" id="clearEdits">Clear edits</button>
+        </div>
+        <p class="note" id="editNote"></p>
+      </div>
+    </details>
+
     <details data-tab="line" open>
       <summary>One line</summary>
       <div class="body">

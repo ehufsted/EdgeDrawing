@@ -4,6 +4,7 @@
 //   A  tone -> canvas geometry -> the work raster -> the Style chain
 //   B  the edges (core/edges.js) -> the edge graph, cleaned to the level of
 //      detail (core/graph.js)
+//   E  hand edits: erased and drawn edges (core/edits.js)
 //   C  one line through it: Eulerian or travelling salesman (core/route.js)
 //   D  straights and arcs at the smallest bend radius (with the bend options of
 //      core/bends.js), and the measurements
@@ -34,6 +35,7 @@ import { routeGraph } from './core/route.js';
 import { pathStats, samplePath, crossings, routePolyline } from './core/arcs.js';
 import { fitLine, tightPlaces, measureStray } from './core/bends.js';
 import { refitPath } from './core/refit.js';
+import { applyEdits } from './core/edits.js';
 
 /**
  * @param {{width,height,data}} rgba
@@ -87,12 +89,22 @@ export function runPipeline(rgba, settings, opts = {}) {
     return { graph: g, high: E.high };
   });
 
+  // E: hand edits to the edges (core/edits.js): erased and drawn, before joining
+  const edits = s.edits || [];
+  const keyE = [keyB, edits];
+  const E = stage('E', keyE, () => {
+    if (!edits.length) return { graph: B.graph, drawn: new Set(), applied: 0 };
+    progress('applying edits');
+    const r = applyEdits(B.graph, edits, { minFeature: s.minFeature, simplify: s.simplify });
+    return { graph: { nodes: r.nodes, edges: r.edges, stats: B.graph.stats }, drawn: r.drawn, applied: r.applied };
+  });
+
   // C: one line
   const start = s.start && isFinite(s.start.x) && isFinite(s.start.y) ? { x: s.start.x, y: s.start.y } : null;
-  const keyC = [keyB, s.join, s.oddJoin, start, s.closed, s.join === 'euler' ? s.walk : null];
+  const keyC = [keyE, s.join, s.oddJoin, start, s.closed, s.join === 'euler' ? s.walk : null];
   const C = stage('C', keyC, () => {
     progress(s.join === 'tsp' ? 'ordering the strokes' : 'joining into one line');
-    return routeGraph(B.graph, { join: s.join, oddJoin: s.oddJoin, start, closed: s.closed, walk: s.walk });
+    return routeGraph(E.graph, { join: s.join, oddJoin: s.oddJoin, start, closed: s.closed, walk: s.walk });
   });
 
   // D: straights and arcs
@@ -120,17 +132,18 @@ export function runPipeline(rgba, settings, opts = {}) {
   });
 
   progress('assembling');
-  const g = B.graph;
+  const g = E.graph;
   const deg = degrees(g.nodes.length, g.edges);
   const st = D.st;
   const stats = {
     length: st.length, edge: st.edge, retrace: st.retrace, join: st.join,
     bends: st.bends, minR: isFinite(st.minR) ? st.minR : 0,
     tight: D.tight.length, sharp: D.sharp ?? D.tight.length, loops: D.loops, crossings: D.crossings.length, strayMax: D.stray.max, strayMean: D.stray.mean,
-    chains: g.edges.length, merged: g.stats.merged, spurs: g.stats.spurs, pieces: g.stats.pieces,
+    chains: g.edges.length, edits: E.applied, merged: g.stats.merged, spurs: g.stats.spurs, pieces: g.stats.pieces,
     ...C.stats,
   };
   const notes = [];
+  if (edits.length > E.applied) notes.push(`${edits.length - E.applied} of ${edits.length} edits changed nothing (nothing to erase there, or a line too short to draw)`);
   const L = (mm) => (mm >= 1000 ? `${(mm / 1000).toFixed(2)} m` : `${Math.round(mm)} mm`);
   if (!g.edges.length) notes.push('no edges found: lower the edge scale or raise the edge amount (or the image has no edges stronger than 4% contrast)');
   if (stats.components > 1 && s.join === 'euler') notes.push(`${stats.components} separate pieces, joined by ${stats.bridges} ${stats.bridges === 1 ? 'bridge' : 'bridges'}`);
@@ -148,6 +161,7 @@ export function runPipeline(rgba, settings, opts = {}) {
     graph: {
       nodes: g.nodes.map((p, i) => ({ x: r4(p.x), y: r4(p.y), deg: deg[i] })),
       edges: g.edges.map((e) => e.pts.map(r4)),
+      drawn: [...E.drawn],   // which edges came from the pencil
     },
     path: { x0: r4(D.path.x0), y0: r4(D.path.y0), segs: D.path.segs.map(roundSeg) },
     start: C.start, end: C.end,

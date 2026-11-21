@@ -72,6 +72,7 @@ export const DEFAULTS = {
   join: 'euler',         // 'euler': trace every edge, retracing or adding lines where needed | 'tsp': order the strokes, jump between them
   oddJoin: 'shorter',    // euler: odd ends joined by 'retrace' (along existing lines) | 'new' (straight new lines) | 'shorter' (whichever is)
   start: null,           // {x, y} mm, where the line should start; null = automatic
+  edits: [],             // hand edits to the edges (core/edits.js), strokes in mm
   closed: false,         // end where it started
   // the line itself (core/arcs.js)
   lineWidth: 1.2,        // mm, the wire's thickness (or the pen's line)
