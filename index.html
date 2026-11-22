@@ -123,6 +123,8 @@
   }
   .canvaswrap { margin: auto; box-shadow: 0 2px 18px #0008; line-height: 0; }
   .canvaswrap canvas { display: block; cursor: crosshair; }
+  /* an edit tool on: a finger draws, rather than scrolling the page or opening a menu */
+  .canvaswrap canvas.editing { touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 
   footer {
     flex: 0 0 auto; border-top: 1px solid var(--line); padding: 6px 12px;
@@ -169,7 +171,6 @@
   <h1>EdgeDrawing</h1>
   <span class="sub">image &rarr; one continuous line, for a pen or wire</span>
   <span class="hspacer"></span>
-  <label class="check" style="margin:0" title="show the Experimental smoothing settings on the Line tab"><input type="checkbox" id="showExp"> Show experiments</label>
   <button class="mini" id="resetAll" title="every control back to its default (the image stays)">Reset all</button>
   <button class="mini" id="openProject" title="open a saved project (.edl.json): the image and every setting">Open project…</button>
   <button class="mini" id="saveProject" title="save the image and every setting, to reopen later and get the same drawing">Save project</button>
@@ -410,6 +411,8 @@
         <p class="note" id="relaxNote">Moves every point that bends tighter than the smallest bend toward its neighbours, within the stray. Needs a smallest bend above 0.</p>
       </div>
     </details>
+
+    <label class="check" id="showExpRow" data-tab="line" title="the Experimental smoothing settings below: they act even while hidden (a note at the top of this tab names any in use)"><input type="checkbox" id="showExp"> Show experimental smoothing</label>
 
     <details data-tab="line" id="expDetails" open>
       <summary>Experimental smoothing</summary>

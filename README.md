@@ -101,8 +101,8 @@ be served over HTTP, not opened as a file.)
 The sidebar has three tabs: **Picture** (image, tone, style, canvas, edges &
 detail), **Line** (joining, line width and bend, smoothing) and **Make** (marks
 for making it, printout and files, and the line's statistics, collapsed). The
-experimental settings show only with **Show experiments** in the header; while hidden, any
-in use is named in a note on the Line tab.
+experimental settings show only with **Show experimental smoothing** at the
+bottom of the Line tab; while hidden, any in use is named in a note at its top.
 
 Changing Tone or Style switches the preview to the Source view, and changing
 Edges & detail to the Edges view, so the effect is in sight.

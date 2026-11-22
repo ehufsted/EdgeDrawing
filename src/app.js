@@ -381,11 +381,11 @@ function experimentsInUse() {
 /** Only the sections of the tab in use; the experiments only when asked for, with a note when they act unseen. */
 function showSections() {
   for (const b of document.querySelectorAll('#sideTabs button')) b.setAttribute('aria-pressed', String(b.dataset.tab === state.tab));
-  for (const d of document.querySelectorAll('aside details[data-tab]')) d.hidden = d.dataset.tab !== state.tab || (d.id === 'expDetails' && !state.showExp);
+  for (const d of document.querySelectorAll('aside > [data-tab]')) d.hidden = d.dataset.tab !== state.tab || (d.id === 'expDetails' && !state.showExp);
   $('showExp').checked = state.showExp;
   const on = experimentsInUse();
   $('expNote').hidden = state.showExp || !on.length || state.tab !== 'line';
-  $('expNote').textContent = on.length ? `Experiments in use, though hidden: ${on.join(', ')}. Tick Show experiments to see them.` : '';
+  $('expNote').textContent = on.length ? `Experiments in use, though hidden: ${on.join(', ')}. Tick Show experimental smoothing, at the bottom of this tab, to see them.` : '';
 }
 
 function bindTabs() {
@@ -709,7 +709,7 @@ function bindAnim() {
 // Hand edits (core/edits.js) live in state.s.edits, so they reach the worker,
 // projects and Reset with the other settings; the redo stack is the session's.
 // They belong to one image: a new image starts with none (a project brings its own).
-const edit = { tool: 'off', eraserMm: 3, redo: [], stroke: null };
+const edit = { tool: 'off', eraserMm: 3, redo: [], stroke: null, pointer: null, pointerType: null };   // pointer: the one drawing the stroke
 state.edit = edit;   // for driving the app from DevTools / the CDP harness
 
 const EDIT_HELP = {
@@ -724,6 +724,8 @@ function setTool(t) {
   $('eraserRow').hidden = t !== 'erase';
   if (t !== 'off') { setPicking(false); showFor('edges'); }
   $('view').style.cursor = t === 'off' ? 'crosshair' : 'cell';
+  // on a touch screen a drag on the preview draws only while a tool is on; otherwise it scrolls
+  $('view').classList.toggle('editing', t !== 'off');
   renderEditNote();
 }
 
@@ -792,17 +794,25 @@ function bindEdits() {
     if (edit.tool === 'erase') { ctx.strokeStyle = '#e0303f66'; ctx.lineWidth = 2 * edit.eraserMm; } else { ctx.strokeStyle = '#1a9e3a'; ctx.lineWidth = Math.max(0.4, state.s.lineWidth); }
     return ctx;
   };
+  // One pointer draws: a second finger landing mid-stroke (a pinch) drops the stroke,
+  // but a palm resting while a stylus draws (another kind of pointer) is ignored; a
+  // stroke the browser cancels is dropped too, never kept half drawn
+  const drop = () => { if (!edit.stroke) return; edit.stroke = null; edit.pointer = null; paint(); };
   canvas.addEventListener('pointerdown', (e) => {
     if (edit.tool === 'off' || !state.plan || e.button !== 0) return;
+    if (edit.stroke) { if (e.pointerType === edit.pointerType) drop(); return; }
+    if (!e.isPrimary) return;
     const [x, y] = at(e);
     edit.stroke = [r3(x), r3(y)];
+    edit.pointer = e.pointerId;
+    edit.pointerType = e.pointerType;
     canvas.setPointerCapture(e.pointerId);
     const ctx = ink();
     ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 1e-3, y); ctx.stroke();
     e.preventDefault();
   });
   canvas.addEventListener('pointermove', (e) => {
-    if (!edit.stroke) return;
+    if (!edit.stroke || e.pointerId !== edit.pointer) return;
     const [x, y] = at(e), p = edit.stroke;
     const lx = p[p.length - 2], ly = p[p.length - 1];
     // enough points to follow the hand, few enough to keep
@@ -811,18 +821,20 @@ function bindEdits() {
     const ctx = ink();
     ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(x, y); ctx.stroke();
   });
-  const finish = () => {
-    if (!edit.stroke) return;
+  const finish = (e) => {
+    if (!edit.stroke || e.pointerId !== edit.pointer) return;
     // kept on the image (core/edits.js), placed by the plan the stroke was drawn on
     const R = state.plan.imageRect;
     const pts = edit.stroke.map((v, i) => r6(i % 2 ? (v - R.y) / R.h : (v - R.x) / R.w));
-    edit.stroke = null;
+    edit.stroke = null; edit.pointer = null;
     if (edit.tool === 'erase') pushEdit({ op: 'erase', r: r6(edit.eraserMm / R.w), pts });
     else if (pts.length >= 4) pushEdit({ op: 'draw', pts });
     else paint();   // a click with the pencil draws nothing
   };
   canvas.addEventListener('pointerup', finish);
-  canvas.addEventListener('pointercancel', finish);
+  canvas.addEventListener('pointercancel', (e) => { if (e.pointerId === edit.pointer) drop(); });
+  // a long press while drawing would open the page's menu
+  canvas.addEventListener('contextmenu', (e) => { if (edit.tool !== 'off') e.preventDefault(); });
 }
 
 // --------------------------------------------------------------- the canvas

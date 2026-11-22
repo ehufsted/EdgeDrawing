@@ -204,8 +204,10 @@ Asked for: fewer bends, distance ticks, numbered bends; tool-agnostic.
 - 2026-11-21, UI: the sidebar is three tabs, Picture (image, tone, style,
   canvas, edges & detail), Line (one line, line, smoothing) and Make (figures,
   marks, output); the Experimental smoothing section shows only with the
-  header's Show experiments switch, and while hidden, any experiment away from
-  its default is named in a note on the Line tab (they still act). Corner loops
+  Show experiments switch (in the header until 2026-11-22, then at the bottom
+  of the Line tab, as the header was too wide on a phone), and while hidden,
+  any experiment away from its default is named in a note on the Line tab
+  (they still act). Corner loops
   shows only when the line is not steered (steering is never tight).
 - 2026-11-21, the user's choices: Precision defaults to Rough draft and Fine
   (2400 px) is gone (a project asking for it gets the default); every Style
