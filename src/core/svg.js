@@ -7,7 +7,6 @@
 // reads it as the single stroke it is.
 
 const NS = 'http://www.w3.org/2000/svg';
-export const FONT = 'Arial, Helvetica, sans-serif';
 
 export const fmt = (v, dp = 3) => {
   if (!isFinite(v)) return '0';

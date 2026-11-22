@@ -181,7 +181,7 @@
     <div class="seg wide tabs" id="sideTabs" role="tablist">
       <button data-tab="picture" aria-pressed="true" title="the image, its size, and how its edges are found">Picture</button>
       <button data-tab="line" aria-pressed="false" title="joining the edges into one line, its width and bend, and its smoothing">Line</button>
-      <button data-tab="make" aria-pressed="false" title="the line's figures, marks for making it, and the printout and files">Make</button>
+      <button data-tab="make" aria-pressed="false" title="the line's statistics, marks for making it, and the printout and files">Make</button>
     </div>
     <p class="note warn" id="expNote" hidden></p>
     <details data-tab="picture" open>
@@ -305,23 +305,35 @@
       </div>
     </details>
 
+    <details data-tab="picture" open>
+      <summary>Edit edges</summary>
+      <div class="body">
+        <div class="row">
+          <div class="seg wide" id="editSeg" title="drag on the preview to erase edges or draw new ones; the line is joined through them">
+            <button data-tool="off" aria-pressed="true">Off</button>
+            <button data-tool="erase" aria-pressed="false">Erase</button>
+            <button data-tool="draw" aria-pressed="false">Draw</button>
+          </div>
+        </div>
+        <div class="row" id="eraserRow" title="the eraser's radius: every edge within it of the stroke is cut away">
+          <label for="eraserMm">Eraser size</label>
+          <input type="number" id="eraserMm" class="len" min="0.5" step="any">
+          <span class="unit"><span class="u"></span> radius</span>
+        </div>
+        <div class="buttons">
+          <button class="mini" id="undoEdit" title="Ctrl+Z">Undo</button>
+          <button class="mini" id="redoEdit" title="Ctrl+Y">Redo</button>
+          <button class="mini" id="clearEdits">Clear edits</button>
+        </div>
+        <p class="note" id="editNote"></p>
+      </div>
+    </details>
+
     <details data-tab="line" open>
       <summary>One line</summary>
       <div class="body">
-        <div class="row">
-          <div class="seg wide" id="joinSeg">
-            <button data-join="euler" aria-pressed="true" title="trace every edge without lifting: separate pieces are bridged, and where the edges branch the line gets back to a branch over a line again or by a new straight">Trace through (Eulerian)</button>
-            <button data-join="tsp" aria-pressed="false" title="draw each edge once, in the shortest order, jumping straight from one to the next">Jump between (TSP)</button>
-          </div>
-        </div>
-        <div class="row" id="oddRow" title="where the edges branch, the line has to get back to a branch it has not drawn">
-          <label for="oddJoin">Back to a branch</label>
-          <select id="oddJoin">
-            <option value="shorter">Whichever is shorter</option>
-            <option value="retrace">Over a line again</option>
-            <option value="new">By a new straight</option>
-          </select>
-        </div>
+        <p class="note">The line traces every edge without lifting: separate pieces are bridged, and where the edges branch it gets back to a branch it has not drawn by the shorter way.</p>
+        <label class="check" title="where the edges branch, get back over a line already drawn rather than by a new straight: with a pen a retraced line does not show, so far less of the line is outside the image, but it is much longer (in wire, two wires side by side)"><input type="checkbox" id="retrace"> Retrace lines instead of adding new ones</label>
         <div class="row">
           <label>Start</label>
           <div class="buttons" style="margin:0">
@@ -444,7 +456,7 @@
       <summary>Marks &amp; output</summary>
       <div class="body">
         <label class="check" title="on the preview: a bar across the line every tick spacing, with the total length so far"><input type="checkbox" id="ticks"> Show distance ticks</label>
-        <label class="check" title="on the preview: each bend numbered in drawing order with its turn (R or L, degrees), a bar where it starts"><input type="checkbox" id="bendNums"> Show bend numbers</label>
+        <label class="check" id="bendNumsRow" title="on the preview: each bend numbered in drawing order with its turn (R or L, degrees), a bar where it starts"><input type="checkbox" id="bendNums"> Show bend numbers</label>
         <div class="row">
           <label for="tickMm">Ticks every</label>
           <input type="number" id="tickMm" class="len" min="5" step="any">
@@ -467,7 +479,7 @@
     </details>
 
     <details data-tab="make">
-      <summary>Figures</summary>
+      <summary>Statistics</summary>
       <div class="body">
         <table class="figs" id="figs"></table>
       </div>
@@ -504,7 +516,7 @@
   <span>line <b id="statLength">—</b></span>
   <span title="arcs in the line">bends <b id="statBends">—</b></span>
   <span title="drawn over a line already there">over again <b id="statRetrace">—</b></span>
-  <span title="bridges, joins and jumps: line that is not an edge of the image">not in image <b id="statJoin">—</b></span>
+  <span title="bridges and joins: line that is not an edge of the image">not in image <b id="statJoin">—</b></span>
   <span title="where the line crosses itself">crossings <b id="statCross">—</b></span>
   <span title="corners tighter than the smallest bend">tight <b id="statTight">—</b></span>
   <span>size <b id="statPiece">—</b></span>
@@ -515,12 +527,12 @@
   <h2>Printable drawing</h2>
   <div class="row"><label for="paperSize">Paper</label>
     <select id="paperSize"><option value="letter">Letter</option><option value="a4">A4</option><option value="tabloid">Tabloid / Ledger</option><option value="a3">A3</option></select></div>
-  <label class="check"><input type="checkbox" id="pSummary" checked> Figures and preview</label>
+  <label class="check"><input type="checkbox" id="pSummary" checked> Statistics and preview</label>
   <label class="check"><input type="checkbox" id="pFit" checked> Whole drawing, scaled to one page</label>
   <label class="check"><input type="checkbox" id="pTemplate" checked> Template at 1:1 (split across pages if needed)</label>
   <label class="check" style="margin-left:22px"><input type="checkbox" id="pTicks" checked> With distance ticks</label>
-  <label class="check" style="margin-left:22px"><input type="checkbox" id="pBendNums" checked> With bend numbers</label>
-  <label class="check"><input type="checkbox" id="pBends" checked> Bend table</label>
+  <label class="check" id="pBendNumsRow" style="margin-left:22px"><input type="checkbox" id="pBendNums" checked> With bend numbers</label>
+  <label class="check" id="pBendsRow"><input type="checkbox" id="pBends" checked> Bend table</label>
   <p class="note" id="printNote"></p>
   <div class="buttons"><button class="primary" id="printGo">Open printable page</button><button id="printClose">Cancel</button></div>
 </dialog>

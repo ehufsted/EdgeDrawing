@@ -9,6 +9,7 @@ import * as arcs from './core.arcs.js';
 import * as output from './core.output.js';
 import * as bends from './core.bends.js';
 import * as marks from './core.marks.js';
+import * as edits from './core.edits.js';
 import * as pipeline from './pipeline.js';
 
 export const SECTIONS = [
@@ -19,6 +20,7 @@ export const SECTIONS = [
   ['core.output', output],
   ['core.bends', bends],
   ['core.marks', marks],
+  ['core.edits', edits],
   ['pipeline', pipeline],
 ];
 

@@ -17,17 +17,6 @@ export const MM_PER_IN = 25.4;
 export const toMm = (v, units) => (units === 'in' ? v * MM_PER_IN : v);
 export const fromMm = (v, units) => (units === 'in' ? v / MM_PER_IN : v);
 
-/** A length for a note: '20 mm' or '0.787 in'. */
-export const lenText = (mm, units) => (units === 'in'
-  ? `${Math.round((mm / MM_PER_IN) * 1000) / 1000} in`
-  : `${Math.round(mm * 100) / 100} mm`);
-
-/** A length as a bare number in the units, for a field. */
-export const fmtLen = (mm, units, dp = 2) => {
-  const v = fromMm(mm, units);
-  return String(Math.round(v * 10 ** dp) / 10 ** dp);
-};
-
 /**
  * Common sizes for a framed line drawing, long side by short side, mm. The app
  * turns a preset to the image's orientation.
@@ -69,9 +58,9 @@ export const DEFAULTS = {
   minLength: 8,          // mm: shorter lines, spurs and loose pieces are dropped
   simplify: 0.3,         // mm: how far the simplified line may stray from the traced one
   // joining it into one line (core/route.js)
-  join: 'euler',         // 'euler': trace every edge, retracing or adding lines where needed | 'tsp': order the strokes, jump between them
-  oddJoin: 'shorter',    // euler: odd ends joined by 'retrace' (along existing lines) | 'new' (straight new lines) | 'shorter' (whichever is)
-  start: null,           // {x, y} mm, where the line should start; null = automatic
+  retrace: false,        // odd ends joined by retracing along existing lines (a pen hides it) rather than by the shorter of that and a new straight
+  start: null,           // {x, y} where the line should start, as fractions of the canvas (0..1 across, down); null = automatic
+  edits: [],             // hand edits to the edges (core/edits.js), strokes on the image (fractions of it)
   closed: false,         // end where it started
   // the line itself (core/arcs.js)
   lineWidth: 1.2,        // mm, the wire's thickness (or the pen's line)
@@ -85,7 +74,7 @@ export const DEFAULTS = {
   maxStray: 3,           // mm, how far relax (and merge or remove) may move the line off the traced edges
   // experimental (the Experimental smoothing tab)
   joinShape: 'straight', // 'straight' | 'dubins': joins as the shortest paths no tighter than the bend
-  walk: 'step',          // euler: 'step' (straightest way on, step by step) | 'pairs' (straightest pairing at every node)
+  walk: 'step',          // 'step' (straightest way on, step by step) | 'pairs' (straightest pairing at every node)
   bendFix: 'none',       // tight corners after the fit: 'none' (reported) | 'merge' | 'remove' (not with pid)
   bendSmooth: 'uniform', // with a bend: 'uniform' (smoothed at two radii) | 'tight' (only where tighter than the bend)
   bendTol: 0,            // mm: the finished line refitted as the fewest arcs within this of it (core/refit.js); 0 = off

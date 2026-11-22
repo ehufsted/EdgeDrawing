@@ -1,18 +1,17 @@
 // The work raster: the canvas as a grid of square-ish pixels, the image resampled
 // onto it, and the conversions every later stage works in.
 //
-// ONE GRID FOR EVERYTHING. The color map, the detail limits and the boundaries
-// are all found on this grid, and only then turned into shapes in mm
-// (core/planar.js), so its pixel size is the finest detail the design can hold.
-// It is set by the canvas's long side and the precision (units.js PRECISION),
-// not by the image: a small image on a big canvas is upsampled, a huge one
-// averaged down.
+// ONE GRID FOR EVERYTHING. The Style filters and the edges are found on this
+// grid, and only then traced into lines in mm (core/graph.js), so its pixel size
+// is the finest detail the drawing can hold. It is set by the canvas's long side
+// and the precision (units.js PRECISION), not by the image: a small image on a
+// big canvas is upsampled, a huge one averaged down.
 //
 // Resampling is an AREA AVERAGE in linear light where a grid pixel covers more
-// than one image pixel (so fine texture averages to the color the eye sees), and
+// than one image pixel (so fine texture averages to the tone the eye sees), and
 // bilinear where it covers less.
 
-import { LINEAR_LUT, toEncoded, rgbToOKLab } from './color.js';
+import { LINEAR_LUT, toEncoded } from './color.js';
 
 /**
  * @param {{width, height, data}} rgba  the toned image
@@ -78,15 +77,3 @@ export function workRaster(rgba, geo, longPx) {
 
 const clampI = (v, a, b) => (v < a ? a : v > b ? b : v);
 const clampF = clampI;
-
-/** Encoded RGBA -> OKLab, interleaved Float32Array(3N). */
-export function toOKLab(rgba) {
-  const n = rgba.width * rgba.height, d = rgba.data;
-  const lab = new Float32Array(3 * n);
-  for (let i = 0; i < n; i++) {
-    const q = 4 * i;
-    const L = rgbToOKLab(LINEAR_LUT[d[q]], LINEAR_LUT[d[q + 1]], LINEAR_LUT[d[q + 2]]);
-    lab[3 * i] = L[0]; lab[3 * i + 1] = L[1]; lab[3 * i + 2] = L[2];
-  }
-  return lab;
-}

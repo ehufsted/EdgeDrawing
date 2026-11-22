@@ -1,6 +1,5 @@
-// Copied verbatim from HalftoneCuttable's core/steer.js (the Kuwahara pre-filter).
-//
-// Direction fields, and blurs steered along them.
+// Copied from HalftoneCuttable's core/steer.js (the Kuwahara pre-filter): only
+// orientationField, the direction field the Kuwahara filter is stretched along.
 //
 // orientationField: which way the image runs at each point, and how sure we are.
 //   The structure tensor (gradient outer product, smoothed), as in the pen-plotter
@@ -12,17 +11,9 @@
 //   to the image's own 90th percentile: nothing below 2% of it, full strength from
 //   a fifth of it up. (Gated on the median, a smooth ramp -- every pixel AT the
 //   median -- got half strength everywhere, and the worms barely leaned.)
-//
-// steerBlur: a Gaussian blur stretched along a per-pixel direction, as two 1-D
-//   passes that each follow the local line (across it, then along it), sampled
-//   bilinearly. Exact for a constant direction and a good approximation for one
-//   that turns slowly over the kernel, which the smoothed field does. A full 2-D
-//   kernel per pixel would be about a hundred times slower; a bank of blurs at
-//   fixed angles several times slower than this at the lengths the Turing screen
-//   needs.
 
-import { makeImage, resize } from '../shim/image.js';
-import { blur, centralGradient, bilerp } from './features.js';
+import { makeImage } from '../shim/image.js';
+import { blur, centralGradient } from './features.js';
 
 /**
  * @param {{w,h,data}} im   encoded luminance
@@ -57,70 +48,6 @@ export function orientationField(im, sigmaT, along = 'edges') {
     const coherence = energy[i] > 0 ? mag / energy[i] : 0;
     const gate = Math.max(0, Math.min(1, (energy[i] / ref - 0.02) / 0.18));
     strength[i] = coherence * gate;
-  }
-  return { ux, uy, strength };
-}
-
-function kernel(sigma) {
-  const r = Math.max(1, Math.ceil(3 * sigma));
-  const k = new Float32Array(2 * r + 1);
-  let s = 0;
-  for (let t = -r; t <= r; t++) { k[t + r] = Math.exp(-(t * t) / (2 * sigma * sigma)); s += k[t + r]; }
-  for (let i = 0; i < k.length; i++) k[i] /= s;
-  return k;
-}
-
-function lineBlur(src, w, h, dx, dy, kernels, pick) {
-  const out = new Float32Array(w * h);
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const i = y * w + x;
-      const k = kernels[pick(i)], r = (k.length - 1) / 2;
-      const ex = dx[i], ey = dy[i];
-      let acc = 0;
-      for (let t = -r; t <= r; t++) acc += k[t + r] * bilerp(src, w, h, x + t * ex, y + t * ey);
-      out[i] = acc;
-    }
-  }
-  return out;
-}
-
-/**
- * Prepare a steered blur: across the direction at sigma, along it at
- * sigma · (1 + stretch · strength), strength quantised to a few levels so the
- * kernels can be built once.
- * @returns {(data:Float32Array) => Float32Array}
- */
-export function steerBlur(field, w, h, sigma, stretch) {
-  const LEVELS = 8;
-  const across = [kernel(sigma)];
-  const along = Array.from({ length: LEVELS + 1 }, (_, l) => kernel(sigma * (1 + (stretch * l) / LEVELS)));
-  const level = new Uint8Array(w * h);
-  for (let i = 0; i < w * h; i++) level[i] = Math.round(Math.max(0, Math.min(1, field.strength[i])) * LEVELS);
-  const vx = new Float32Array(w * h), vy = new Float32Array(w * h);
-  for (let i = 0; i < w * h; i++) { vx[i] = -field.uy[i]; vy[i] = field.ux[i]; }
-  return (data) => lineBlur(lineBlur(data, w, h, vx, vy, across, () => 0), w, h, field.ux, field.uy, along, (i) => level[i]);
-}
-
-/**
- * A direction field resampled to another raster size. Directions are
- * interpolated as strength-weighted DOUBLED angles (cos 2θ, sin 2θ) · strength, so
- * opposite arrows average to the same line instead of canceling, and a weak
- * direction does not pull a strong neighbor round.
- */
-export function resampleField(f, w, h, W2, H2) {
-  const n = w * h, c = makeImage(w, h), s = makeImage(w, h);
-  for (let i = 0; i < n; i++) {
-    const cs = f.ux[i] * f.ux[i] - f.uy[i] * f.uy[i], sn = 2 * f.ux[i] * f.uy[i];
-    c.data[i] = cs * f.strength[i]; s.data[i] = sn * f.strength[i];
-  }
-  const C = resize(c, W2, H2).data, S = resize(s, W2, H2).data;
-  const N = W2 * H2;
-  const ux = new Float32Array(N), uy = new Float32Array(N), strength = new Float32Array(N);
-  for (let i = 0; i < N; i++) {
-    const th = 0.5 * Math.atan2(S[i], C[i]);
-    ux[i] = Math.cos(th); uy[i] = Math.sin(th);
-    strength[i] = Math.min(1, Math.hypot(C[i], S[i]));
   }
   return { ux, uy, strength };
 }

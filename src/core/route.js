@@ -1,10 +1,7 @@
-// One line through the whole edge graph (core/graph.js).
+// One line through the whole edge graph (core/graph.js), EULERIAN: a pen can
+// draw a graph in one stroke without lifting exactly when it is connected and at
+// most two nodes have an odd number of chains (Euler, 1736). So:
 //
-// Two ways, the person's choice:
-//
-// EULERIAN ('euler'). A pen can draw a graph in one stroke without lifting
-// exactly when it is connected and at most two nodes have an odd number of
-// chains (Euler, 1736). So:
 //   1. BRIDGES join the separate pieces: Borůvka's minimum spanning tree over
 //      the pieces, each bridge the shortest straight line between two of them
 //      (between points sampled every BRIDGE_STEP mm along their chains, so a
@@ -14,45 +11,46 @@
 //      else makes a new odd node, which step 2 must pair. So a bridge may be
 //      ODD_BONUS mm longer per end to land on an odd node.
 //   2. ODD NODES are paired up, every pair but one (the line's two ends), and
-//      each pair joined, as the person chose: RETRACING the shortest way along
-//      chains already there (they are drawn twice; on paper that hides, in
-//      wire it is two wires side by side), with a NEW straight line, or
-//      whichever is shorter. The pairing is greedy, nearest pairs first, over
-//      each odd node's K_PAIR nearest candidates (the Chinese postman problem
-//      wants a minimum-weight perfect matching; greedy is within a small factor
-//      on drawings and far cheaper).
+//      each pair joined. By default by WHICHEVER IS SHORTER of a new straight
+//      line and the way along the chains already there, pair by pair: a straight
+//      is never longer, so this retraces only where that way is itself straight
+//      (a tie the retrace takes, as it keeps to the image). With `retrace` on
+//      (the person's choice, for a pen), always by RETRACING the shortest way
+//      along chains already there: drawn twice, which on paper hides, where in
+//      wire it is two wires side by side; a far longer line, but much less of it
+//      outside the image. The pairing is greedy, nearest pairs first, over each
+//      odd node's K_PAIR nearest candidates (the Chinese postman problem wants a
+//      minimum-weight perfect matching; greedy is within a small factor on
+//      drawings and far cheaper).
 //   3. HIERHOLZER'S algorithm walks every chain once from the start. At each
 //      node it takes the chain that continues STRAIGHTEST from the way it came
 //      in, so the line flows through junctions instead of zig-zagging (any
 //      choice gives a valid walk; this one reads as drawn).
 //
-// TRAVELLING SALESMAN ('tsp'). Each chain is a stroke drawn once, and the line
-// JUMPS from the end of one to the start of the next. The strokes are ordered
-// by nearest neighbour from the start, then improved by 2-opt (reversing a run
-// of strokes, each turned round, whenever that shortens the jumps), within a
-// fixed budget of evaluations (not time: the same input must give the same
-// line on any machine). Jumps between chains that share a node are zero long.
+// (A travelling-salesman order of the chains, jumping between them, was an
+// option until 2026-11-21: measured on the samples it drew nearly the same line,
+// with up to 18% more of it outside the image on the photographs.)
 //
 // THE ROUTE is the line as runs, end to end: [{pts, kind}], pts a flat [x, y,
 // ...] in mm, each run starting where the last ended. kind is 'edge' (an edge
 // of the image, drawn for the first time), 'retrace' (drawn again) or 'join' (a
-// line the image does not have: bridges, new joins and jumps).
+// line the image does not have: bridges and new joins).
 
 import { components, degrees, polyLength, reverse } from './graph.js';
 
 export const BRIDGE_STEP = 2;     // mm between the points a bridge may leave from
 export const K_PAIR = 8;          // candidate partners per odd node
 export const ODD_BONUS = 5;       // mm: a bridge may be this much longer per end to land on an odd node
-export const TWO_OPT_BUDGET = 4e7;
 
 /**
  * @param {{nodes, edges}} graph
- * @param {{join:'euler'|'tsp', oddJoin:'retrace'|'new'|'shorter', start:{x,y}|null, closed:boolean, walk?:'step'|'pairs'}} o
+ * @param {{retrace?:boolean, start:{x,y}|null, closed:boolean, walk?:'step'|'pairs'}} o
+ *   retrace: odd nodes always joined along the lines; otherwise by the shorter way
  * @returns {{runs, start, end, stats}}
  */
 export function routeGraph(graph, o) {
   if (!graph.edges.length) return { runs: [], start: null, end: null, stats: { components: 0, bridges: 0, odd: 0, pairs: 0 } };
-  return o.join === 'tsp' ? routeTSP(graph, o) : routeEuler(graph, o);
+  return routeEuler(graph, o);
 }
 
 // ------------------------------------------------------------------ spatial grid
@@ -145,7 +143,7 @@ function routeEuler(graph, o) {
     pairUp = odd.filter((v) => v !== start);
   }
   const adj = adjacency(nodes.length, edges);
-  const pairs = pairOdd(nodes, edges, adj, pairUp, o.closed || !odd.length ? 0 : 1, o.oddJoin || 'retrace');
+  const pairs = pairOdd(nodes, edges, adj, pairUp, o.closed || !odd.length ? 0 : 1, o.retrace ? 'retrace' : 'shorter');
   stats.pairs = pairs.length;
   for (const p of pairs) {
     if (p.how === 'new') edges.push({ a: p.u, b: p.v, pts: [nodes[p.u].x, nodes[p.u].y, nodes[p.v].x, nodes[p.v].y], kind: 'join' });
@@ -275,20 +273,30 @@ function bridge(nodes, edges) {
 
 /**
  * Pair the odd nodes, leaving `leave` of them unpaired (the line's far end).
+ * @param {'shorter'|'retrace'} mode  each pair by the shorter of a straight and a retrace, or always retraced
  * @returns {[{u, v, how:'retrace'|'new', path:[{e, rev}]}]}
  */
 function pairOdd(nodes, edges, adj, odd, leave, mode) {
   if (odd.length <= leave) return [];
+  const shorter = mode !== 'retrace';
   const isOdd = new Uint8Array(nodes.length);
   for (const v of odd) isOdd[v] = 1;
   const elen = edges.map((e) => polyLength(e.pts));
   const cands = [];
-  if (mode !== 'new') {
-    for (const u of odd) {
-      for (const [v, d] of dijkstraTo(adj, elen, u, (x) => isOdd[x] && x !== u, K_PAIR)) if (u < v) cands.push({ u, v, d, how: 'retrace' });
+  const straight = (u, v) => Math.hypot(nodes[u].x - nodes[v].x, nodes[u].y - nodes[v].y);
+  for (const u of odd) {
+    for (const [v, d] of dijkstraTo(adj, elen, u, (x) => isOdd[x] && x !== u, K_PAIR)) {
+      if (u > v) continue;
+      cands.push({ u, v, d, how: 'retrace' });
+      // 'shorter': the same pair by a straight too. The straights below are only
+      // looked for nearby, so without this a far pair could only retrace, however
+      // much longer that was. A straight is never longer than a way along lines;
+      // where they are the same (a way along a straight edge) the retrace stays,
+      // as it keeps to the image
+      if (shorter) { const s = straight(u, v); if (s < d - 1e-6) cands.push({ u, v, d: s, how: 'new' }); }
     }
   }
-  if (mode !== 'retrace') {
+  if (shorter) {
     const pts = odd.map((v) => nodes[v]);
     const g = gridOf(pts, 10);
     odd.forEach((u, iu) => {
@@ -299,12 +307,17 @@ function pairOdd(nodes, edges, adj, odd, leave, mode) {
     });
   }
   cands.sort((p, q) => p.d - q.d || p.u - q.u || p.v - q.v || (p.how < q.how ? -1 : 1));
+  // a pair's retrace, by its ends: a straight no shorter than it gives way to it
+  const retraceOf = new Map();
+  for (const c of cands) if (c.how === 'retrace') retraceOf.set(`${c.u},${c.v}`, c);
   const matched = new Uint8Array(nodes.length);
   const pairs = [];
   let left = odd.length;
-  for (const c of cands) {
+  for (let c of cands) {
     if (left <= leave) break;
     if (matched[c.u] || matched[c.v]) continue;
+    const r = c.how === 'new' && retraceOf.get(`${c.u},${c.v}`);
+    if (r && r.d <= c.d + 1e-6) c = r;
     matched[c.u] = 1; matched[c.v] = 1; left -= 2;
     pairs.push(c);
   }
@@ -314,20 +327,19 @@ function pairOdd(nodes, edges, adj, odd, leave, mode) {
     const u = rest.pop();
     const want = new Set(rest);
     let v = -1, d = Infinity, how = 'new';
-    if (mode !== 'new') {
-      const r = dijkstraTo(adj, elen, u, (x) => want.has(x), 1);
-      if (r.length) { [v, d] = r[0]; how = 'retrace'; }
-    }
-    if (mode !== 'retrace' || v < 0) {
+    const r = dijkstraTo(adj, elen, u, (x) => want.has(x), 1);
+    if (r.length) { [v, d] = r[0]; how = 'retrace'; }
+    if (shorter || v < 0) {
+      // a straight only where it is shorter than the retrace (the same length: the retrace, on the image)
       for (const x of rest) {
-        const dd = Math.hypot(nodes[x].x - nodes[u].x, nodes[x].y - nodes[u].y);
-        if (dd < d) { d = dd; v = x; how = 'new'; }
+        const dd = straight(u, x);
+        if (dd < (how === 'retrace' ? d - 1e-6 : d)) { d = dd; v = x; how = 'new'; }
       }
     }
     rest = rest.filter((x) => x !== v);
     pairs.push({ u, v, d, how });
   }
-  if (mode !== 'retrace') improveJoins(nodes, pairs, rest);
+  if (shorter) improveJoins(nodes, pairs, rest);
   for (const p of pairs) if (p.how === 'retrace') p.path = shortestPath(adj, elen, p.u, p.v);
   return pairs;
 }
@@ -583,85 +595,4 @@ export function pairedWalk(n, edges, start) {
     s = mate[o];
   }
   return walk;
-}
-
-// ------------------------------------------------------------------ tsp
-function routeTSP(graph, o) {
-  const strokes = graph.edges.map((e) => ({ pts: e.pts, loop: e.a === e.b }));
-  const m = strokes.length;
-  // entry candidates: both ends of an open stroke, every point of a loop
-  const entries = [];
-  strokes.forEach((s, i) => {
-    const p = s.pts, k = p.length / 2;
-    if (s.loop) for (let j = 0; j < k - 1; j++) entries.push({ x: p[2 * j], y: p[2 * j + 1], s: i, at: j });
-    else { entries.push({ x: p[0], y: p[1], s: i, at: 0 }); entries.push({ x: p[2 * k - 2], y: p[2 * k - 1], s: i, at: -1 }); }
-  });
-  const grid = gridOf(entries, 10);
-  const done = new Uint8Array(m);
-  const seq = [];
-  let cur = o.start || { x: 0, y: 0 };
-  for (let step = 0; step < m; step++) {
-    const j = grid.nearest(cur.x, cur.y, (q) => !done[entries[q].s]);
-    const en = entries[j], s = strokes[en.s];
-    done[en.s] = 1;
-    let pts;
-    if (s.loop) {
-      const k = s.pts.length / 2 - 1;   // distinct points (the last repeats the first)
-      pts = [];
-      for (let t = 0; t <= k; t++) { const q = (en.at + t) % k; pts.push(s.pts[2 * q], s.pts[2 * q + 1]); }
-    } else pts = en.at === 0 ? s.pts : reverse(s.pts);
-    seq.push(pts);
-    cur = { x: pts[pts.length - 2], y: pts[pts.length - 1] };
-  }
-  const closedAt = o.closed ? { x: seq[0][0], y: seq[0][1] } : null;
-  twoOpt(seq, closedAt);
-  const runs = [];
-  let joins = 0, prev = null;
-  for (const pts of seq) {
-    if (prev && Math.hypot(pts[0] - prev[0], pts[1] - prev[1]) > 1e-6) { runs.push({ pts: [prev[0], prev[1], pts[0], pts[1]], kind: 'join' }); joins++; }
-    runs.push({ pts, kind: 'edge' });
-    prev = [pts[pts.length - 2], pts[pts.length - 1]];
-  }
-  if (closedAt && Math.hypot(prev[0] - closedAt.x, prev[1] - closedAt.y) > 1e-6) { runs.push({ pts: [prev[0], prev[1], closedAt.x, closedAt.y], kind: 'join' }); joins++; }
-  const first = runs[0].pts, last = runs[runs.length - 1].pts;
-  return {
-    runs,
-    start: { x: first[0], y: first[1] },
-    end: { x: last[last.length - 2], y: last[last.length - 1] },
-    stats: { components: components(graph.nodes.length, graph.edges).count, bridges: 0, odd: 0, pairs: 0, strokes: m, jumps: joins },
-  };
-}
-
-/**
- * 2-opt on an ordered list of strokes (each a flat polyline), the first kept
- * first: reverse strokes i..j (each turned round) when that shortens the jumps.
- * `closedAt`: the line returns there after the last stroke. In place.
- */
-export function twoOpt(seq, closedAt) {
-  const m = seq.length;
-  if (m < 3) return seq;
-  const S = (i) => [seq[i][0], seq[i][1]];
-  const E = (i) => { const p = seq[i]; return [p[p.length - 2], p[p.length - 1]]; };
-  const d = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
-  let budget = TWO_OPT_BUDGET;
-  let improved = true;
-  while (improved && budget > 0) {
-    improved = false;
-    for (let i = 1; i < m - 1 && budget > 0; i++) {
-      const a = E(i - 1);
-      for (let j = i + 1; j < m; j++) {
-        budget--;
-        const next = j + 1 < m ? S(j + 1) : closedAt ? [closedAt.x, closedAt.y] : null;
-        const before = d(a, S(i)) + (next ? d(E(j), next) : 0);
-        const after = d(a, E(j)) + (next ? d(S(i), next) : 0);
-        if (after < before - 1e-9) {
-          const part = seq.slice(i, j + 1).reverse().map(reverse);
-          for (let k = 0; k < part.length; k++) seq[i + k] = part[k];
-          improved = true;
-          break;
-        }
-      }
-    }
-  }
-  return seq;
 }

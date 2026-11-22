@@ -2,7 +2,7 @@
 //
 //   { app: 'EdgeDrawing', version, savedAt,
 //     image: { kind: 'sample', name } | { kind: 'file', name, dataURL },
-//     units, settings: {...units.DEFAULTS, style (core/style.js)},
+//     units, settings: {...units.DEFAULTS, style (core/style.js), edits (core/edits.js)},
 //     display: {ink, paper, ticks, bendNums, tickMm, markSize} }
 //
 // THE PLAN IS NOT SAVED. It is deterministic (no randomness, and the 2-opt
@@ -19,6 +19,7 @@ import { normalizeHex } from './color.js';
 import { DEFAULTS, PRECISION, PID_D_MAX } from './units.js';
 import { normalizeStyle } from './style.js';
 import { TICK_MIN, LABEL_MIN, LABEL_MAX } from './marks.js';
+import { parseEdits } from './edits.js';
 
 export const PROJECT_VERSION = 1;
 export const APP = 'EdgeDrawing';
@@ -33,10 +34,9 @@ const NUMS = {
 };
 /** The settings that are one of a few words. */
 const ENUMS = {
-  join: ['euler', 'tsp'], oddJoin: ['retrace', 'new', 'shorter'],
   joinShape: ['straight', 'dubins'], walk: ['step', 'pairs'], smoothing: ['pid', 'fourier', 'optimize', 'none'], bendFix: ['none', 'merge', 'remove'], bendSmooth: ['uniform', 'tight'],
 };
-const BOOLS = ['closed', 'loops'];
+const BOOLS = ['closed', 'loops', 'retrace'];
 
 // ticks, bendNums: show the distance ticks, the numbered bends (core/marks.js) on the preview; tickMm: tick spacing; markSize: label size, mm
 export const DISPLAY = { ink: '#1a1a1a', paper: '#ffffff', ticks: false, bendNums: false, tickMm: 100, markSize: 2.5 };
@@ -80,12 +80,16 @@ export function parseProject(json) {
     else problems.push(`${k}: unusable, using ${DEFAULTS[k]}`);
   }
   for (const k of BOOLS) if (typeof src[k] === 'boolean') settings[k] = src[k];
+  const pe = parseEdits(src.edits);
+  settings.edits = pe.edits;
+  if (pe.dropped) problems.push(`${pe.dropped} edge edits unusable, left out`);
   const st = src.start;
   settings.start = st && isFinite(Number(st.x)) && isFinite(Number(st.y)) ? { x: Number(st.x), y: Number(st.y) } : null;
   const ns = normalizeStyle(src.style);
   settings.style = ns.style;
   problems.push(...ns.problems);
-  if (src.precision === undefined || PRECISION[src.precision]) settings.precision = src.precision ?? DEFAULTS.precision;
+  // own keys only: 'constructor' or 'toString' is on every object
+  if (src.precision === undefined || Object.hasOwn(PRECISION, src.precision)) settings.precision = src.precision ?? DEFAULTS.precision;
   else { settings.precision = DEFAULTS.precision; problems.push(`precision: unusable, using ${DEFAULTS.precision}`); }
 
   const d = o.display && typeof o.display === 'object' ? o.display : {};

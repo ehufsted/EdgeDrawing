@@ -14,12 +14,13 @@
 import { DEFAULTS, PRESETS, PID_D_MAX, toMm, pieceGeometry, applyTone } from './core/units.js';
 import { normalizeHex } from './core/color.js';
 import { drawingSVG, downloadFile, arrowAt } from './core/svg.js';
-import { planHTML, PAPERS, pageWindows, printable, fmtLen, longText } from './core/printout.js';
+import { planHTML, PAPERS, pageWindows, printable, bendTablePages, fmtLen, longText } from './core/printout.js';
 import { projectJSON, parseProject, DISPLAY } from './core/project.js';
 import { filterById, defaultStyle } from './core/style.js';
 import { trimPath } from './core/arcs.js';
 import { layoutMarks, bendList, bendText, bendCSV, alongText, MIN_BEND, TICK_MIN, LABEL_MIN, LABEL_MAX } from './core/marks.js';
 import { generateSample } from './app/samples.js';
+import { edgeKeys } from './pipeline.js';
 
 const $ = (id) => document.getElementById(id);
 const STORE = 'edgedrawing.v1';
@@ -39,7 +40,8 @@ const DETAIL = {
 /** What the line is doing, as the Route view colours it. */
 const KIND = { edge: '#1a1a1a', retrace: '#e08a00', join: '#2a6fdb' };
 
-const freshSettings = () => ({ ...DEFAULTS, start: null, style: defaultStyle() });
+// fresh arrays every time: Reset must never hand out DEFAULTS' own (edits are pushed into in place)
+const freshSettings = () => ({ ...DEFAULTS, start: null, edits: [], style: defaultStyle() });
 
 const state = {
   rgba: null,           // {width, height, data} as loaded
@@ -61,6 +63,10 @@ const state = {
   anim: { t: 1, playing: false, raf: 0, last: 0 },
   jobId: 0,
   pending: false,
+  jobEdits: null,       // JSON of the edits the latest job was sent
+  planEdits: null,      // ...and of those `plan` was made from
+  jobEdgesKey: null,    // the latest job's edge-stage key (pipeline.edgeKeys): a run making the same edges waits for it
+  queued: false,        // settings changed while that job ran: run again when it is over
 };
 window.edgeDrawing = state;   // for driving the app from DevTools / the CDP harness
 
@@ -70,7 +76,7 @@ window.edgeDrawing = state;   // for driving the app from DevTools / the CDP har
 function save() {
   try {
     // the start point belongs to one image, so it is not kept here (a project keeps it)
-    localStorage.setItem(STORE, JSON.stringify({ units: state.units, preset: state.preset, s: { ...state.s, start: null }, disp: state.disp, tab: state.tab, showExp: state.showExp }));
+    localStorage.setItem(STORE, JSON.stringify({ units: state.units, preset: state.preset, s: { ...state.s, start: null, edits: [] }, disp: state.disp, tab: state.tab, showExp: state.showExp }));
   } catch { /* storage unavailable */ }
 }
 
@@ -97,7 +103,7 @@ function spawnWorker() {
   try {
     const w = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
     w.onmessage = onWorkerMessage;
-    w.onerror = (e) => setStatus(`worker error: ${e.message}`, 'bad');
+    w.onerror = (e) => { setStatus(`worker error: ${e.message}`, 'bad'); state.pending = false; runQueued(); };
     return w;
   } catch (err) {
     setStatus('module workers unavailable — see console', 'bad');
@@ -118,28 +124,34 @@ function cancelInFlight() {
 function onWorkerMessage(ev) {
   const msg = ev.data;
   if (msg.jobId !== state.jobId) return;
-  if (msg.type === 'progress') { setStatus(msg.stage + '…'); return; }
+  if (msg.type === 'progress') { setStatus(msg.stage + '…' + (state.queued ? ' (then again with the latest settings)' : '')); return; }
   if (msg.type === 'error') {
     state.pending = false;
-    if (msg.code === 'NO_IMAGE') { state.workerHas = null; run(); return; }
+    if (msg.code === 'NO_IMAGE') { state.workerHas = null; state.queued = false; run(); return; }
     setStatus(`error: ${msg.message}`, 'bad');
     console.error(msg.stack || msg.message);
+    runQueued();   // the settings since may not fail
     return;
   }
   if (msg.type === 'done') {
     state.pending = false;
     state.plan = msg.plan;
+    state.planEdits = state.jobEdits;
     if (msg.styled) {
       const c = document.createElement('canvas');
       c.width = msg.styled.width; c.height = msg.styled.height;
       c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(msg.styled.data), c.width, c.height), 0, 0);
       state.styled = c;
     }
-    setStatus(`ready · ${(msg.ms / 1000).toFixed(1)} s`);
+    // a value typed wrong while this ran stopped its own run: still say so, not "ready"
+    const problem = validate(state.s);
+    if (problem) setStatus(problem, 'bad'); else setStatus(`ready · ${(msg.ms / 1000).toFixed(1)} s`);
     paint();
     updateStats();
     renderFigures();
     renderStartNote();
+    renderEditNote();
+    runQueued();   // shown meanwhile: the line from the settings of a moment ago
   }
 }
 
@@ -165,14 +177,35 @@ function run() {
   const problem = validate(s);
   if (problem) { setStatus(problem, 'bad'); return; }
   save();
+  // A run in progress that makes the same edges as this one is left to finish, and
+  // this one waits for it: it fills the worker's stage cache with them, so this one
+  // then takes only the later stages (the line, its fit). Cancelled, it would take
+  // the cache with it, and every change made while it ran would start over from
+  // the image. One that makes other edges is of no use to this one: cancelled.
+  const edgesKey = JSON.stringify(edgeKeys(s, state.imageKey).keyB);
+  if (state.pending && edgesKey === state.jobEdgesKey) {
+    state.queued = true;
+    setStatus('working… (then again with the latest settings)');
+    return;
+  }
   cancelInFlight();
   if (!worker) return;
   state.jobId++;
   state.pending = true;
+  state.queued = false;
   setStatus('working…');
   const send = state.workerHas !== state.imageKey;
   worker.postMessage({ type: 'run', jobId: state.jobId, imageKey: state.imageKey, rgba: send ? state.rgba : undefined, settings: s });
   state.workerHas = state.imageKey;
+  state.jobEdits = JSON.stringify(s.edits);   // what the plan this job makes was made from (renderEditNote)
+  state.jobEdgesKey = edgesKey;
+}
+
+/** A job is over (done or failed): the settings that waited for it run now. */
+function runQueued() {
+  if (!state.queued) return;
+  state.queued = false;
+  run();
 }
 
 let runTimer = null;
@@ -188,6 +221,7 @@ const unitLabel = () => (state.units === 'in' ? 'in' : 'mm');
 function showLengths() {
   for (const id of LEN_IDS) $(id).value = L(state.s[id]);
   for (const id of DISP_LEN_IDS) $(id).value = L(state.disp[id]);
+  $('eraserMm').value = L(edit.eraserMm);
   for (const el of document.querySelectorAll('.u')) el.textContent = unitLabel();
   for (const b of document.querySelectorAll('#unitSeg button')) b.setAttribute('aria-pressed', String(b.dataset.units === state.units));
   $('edgeAmount').value = state.s.edgeAmount;
@@ -210,7 +244,7 @@ function bindLengths() {
       if (id === 'widthMm' || id === 'heightMm') { state.preset = 'custom'; $('preset').value = 'custom'; }
       showDetailPreset();
       if (id === 'lineWidth') paint();
-      if (id === 'bendTol') showSections();   // the note on experiments in use
+      if (id === 'bendTol') { showSections(); showBendControls(); paint(); }   // the note on experiments in use; the bend marks
       if (EDGE_IDS.includes(id)) showFor('edges');
       scheduleRun();   // the line width too: it sets how close two crossings count as one
     });
@@ -277,14 +311,11 @@ function updatePieceNote() {
 
 // ------------------------------------------------------------------ the line
 function showJoin() {
-  for (const b of document.querySelectorAll('#joinSeg button')) b.setAttribute('aria-pressed', String(b.dataset.join === state.s.join));
-  $('oddRow').hidden = state.s.join !== 'euler';
-  $('walkRow').hidden = state.s.join !== 'euler';
   for (const id of BEND_IDS) $(id).value = state.s[id];
   for (const id of GAIN_IDS) $(id).value = state.s[id];
   showBendRows();
   showSections();
-  $('oddJoin').value = state.s.oddJoin;
+  $('retrace').checked = state.s.retrace;
   $('closed').checked = state.s.closed;
 }
 
@@ -294,7 +325,9 @@ function showLine() {
 
 function renderStartNote() {
   const st = state.s.start, plan = state.plan;
-  let t = st ? `Starts near ${L(st.x, 1)}, ${L(st.y, 1)} ${unitLabel()} (from the top left).` : 'Starts at the loose end nearest the top-left corner.';
+  // the start is kept as fractions of the canvas: shown as lengths on the canvas as it is now
+  const piece = state.rgba ? pieceGeometry(state.rgba, state.s) : plan && plan.piece;
+  let t = st && piece ? `Starts near ${L(st.x * piece.W, 1)}, ${L(st.y * piece.H, 1)} ${unitLabel()} (from the top left).` : 'Starts at the loose end nearest the top-left corner.';
   if (plan && plan.end) t += ` Ends at ${L(plan.end.x, 1)}, ${L(plan.end.y, 1)}.`;
   if (state.picking) t = 'Click on the preview where the line should start (Esc to cancel).';
   $('startNote').textContent = t;
@@ -308,13 +341,14 @@ function setPicking(on) {
 }
 
 function bindLine() {
-  for (const b of document.querySelectorAll('#joinSeg button')) {
-    b.addEventListener('click', () => { state.s.join = b.dataset.join; showJoin(); scheduleRun(0); });
-  }
-  $('oddJoin').addEventListener('change', () => { state.s.oddJoin = $('oddJoin').value; scheduleRun(0); });
+  $('retrace').addEventListener('change', () => { state.s.retrace = $('retrace').checked; scheduleRun(0); });
   $('closed').addEventListener('change', () => { state.s.closed = $('closed').checked; scheduleRun(0); });
   $('startAuto').addEventListener('click', () => { setPicking(false); if (state.s.start) { state.s.start = null; scheduleRun(0); } renderStartNote(); });
-  $('startPick').addEventListener('click', () => setPicking(!state.picking));
+  $('startPick').addEventListener('click', () => {
+    // a click on the preview with an edit tool on would edit, not pick: picking puts the tool away
+    if (!state.picking && edit.tool !== 'off') setTool('off');
+    setPicking(!state.picking);
+  });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.picking) setPicking(false); });
   $('loops').addEventListener('change', () => { state.s.loops = $('loops').checked; scheduleRun(0); });
   for (const id of BEND_IDS) $(id).addEventListener('change', () => { state.s[id] = $(id).value; showBendRows(); showSections(); scheduleRun(0); });
@@ -337,7 +371,7 @@ const TABS = ['picture', 'line', 'make'];
 function experimentsInUse() {
   const s = state.s, on = [];
   if (s.joinShape !== DEFAULTS.joinShape) on.push('Dubins joins');
-  if (s.walk !== DEFAULTS.walk && s.join === 'euler') on.push('straightest pairing');
+  if (s.walk !== DEFAULTS.walk) on.push('straightest pairing');
   if (s.bendFix !== DEFAULTS.bendFix && s.smoothing !== 'pid') on.push(s.bendFix === 'merge' ? 'merge tight corners' : 'cut tight corners');
   if (s.bendSmooth !== DEFAULTS.bendSmooth) on.push('edge smoothing only where tight');
   if (s.bendTol > 0) on.push('fewer bends');
@@ -489,9 +523,17 @@ function drawEdges(ctx, plan, k) {
   drawPaper(ctx, plan, '#ffffff');
   ctx.strokeStyle = '#333333';
   lineStyle(ctx, k, 1.2 / k);
-  const p = new Path2D();
-  for (const e of plan.graph.edges) { p.moveTo(e[0], e[1]); for (let i = 2; i < e.length; i += 2) p.lineTo(e[i], e[i + 1]); }
+  const drawn = new Set(plan.graph.drawn || []);
+  const p = new Path2D(), q = new Path2D();
+  plan.graph.edges.forEach((e, i) => {
+    const t = drawn.has(i) ? q : p;
+    t.moveTo(e[0], e[1]);
+    for (let j = 2; j < e.length; j += 2) t.lineTo(e[j], e[j + 1]);
+  });
   ctx.stroke(p);
+  ctx.strokeStyle = '#1a9e3a';   // drawn by hand
+  lineStyle(ctx, k, 2 / k);
+  ctx.stroke(q);
   const r = Math.max(0.4, 2.2 / k);
   for (const n of plan.graph.nodes) {
     if (n.deg === 2) continue;
@@ -527,7 +569,20 @@ function drawView(ctx, plan, view, k) {
   } else if (view === 'edges') drawEdges(ctx, plan, k);
   else if (view === 'source') drawSource(ctx, plan);
   else if (view === 'problems') { drawProblems(ctx, plan, k); drawMarkers(ctx, plan, k); }
-  if ((state.disp.ticks || state.disp.bendNums) && view !== 'edges' && view !== 'source') drawMade(ctx, plan, k);
+  if ((state.disp.ticks || showBendNums()) && view !== 'edges' && view !== 'source') drawMade(ctx, plan, k);
+}
+
+// Bends are worth numbering only on a line refitted as fewer bends: otherwise it
+// is thousands of short arcs. The controls follow the setting; what is drawn,
+// printed and saved follows the plan, so the old plan's arcs are never numbered
+// while the refitted one is on its way.
+const bendsMade = () => state.s.bendTol > 0;
+const planBends = () => bendsMade() && !!state.plan && state.plan.refitted;
+const showBendNums = () => state.disp.bendNums && planBends();
+
+/** The bend numbers and bend table controls, only with Fewer bends. */
+function showBendControls() {
+  for (const id of ['bendNumsRow', 'exportBends', 'pBendNumsRow', 'pBendsRow']) $(id).hidden = !bendsMade();
 }
 
 /** How many bends there are to make (cached on the plan). */
@@ -539,7 +594,7 @@ function bendCount(plan) {
 /** The making marks (core/marks.js), laid out once per plan and settings. */
 function madeLayout(plan, k) {
   const fs = Math.max(state.disp.markSize, 9 / k);   // readable on screen at any zoom
-  const show = { ticks: state.disp.ticks, bends: state.disp.bendNums };
+  const show = { ticks: state.disp.ticks, bends: showBendNums() };
   const key = `${state.disp.tickMm}|${fs.toFixed(3)}|${state.units}|${state.s.lineWidth}|${show.ticks}|${show.bends}`;
   if (!plan._made || plan._made.key !== key) {
     Object.defineProperty(plan, '_made', { value: { key, layout: layoutMarks(plan.path, state.disp.tickMm, fs, state.s.lineWidth, state.units, show) }, enumerable: false, configurable: true, writable: true });
@@ -580,9 +635,9 @@ function drawMade(ctx, plan, k) {
 
 const HINTS = {
   drawing: 'the drawing: one line, at its true width',
-  route: 'black: the image\'s edges · orange: over a line again · blue: not in the image (bridges, joins, jumps) · green ring: start · red square: end',
+  route: 'black: the image\'s edges · orange: over a line again · blue: not in the image (bridges, joins) · green ring: start · red square: end',
   overlay: 'the line over the image',
-  edges: 'the edges found, before joining · orange: loose ends · blue: junctions',
+  edges: 'the edges found, before joining · orange: loose ends · blue: junctions · green: drawn by hand',
   source: 'the image after Tone and Style, as its edges are found',
   problems: 'red rings: corners tighter than the smallest bend · orange dots: crossings · blue: not in the image',
 };
@@ -650,6 +705,126 @@ function bindAnim() {
   $('progress').addEventListener('input', () => { stopAnim(); setProgress(parseInt($('progress').value, 10) / 1000); });
 }
 
+// ------------------------------------------------------------- edit edges
+// Hand edits (core/edits.js) live in state.s.edits, so they reach the worker,
+// projects and Reset with the other settings; the redo stack is the session's.
+// They belong to one image: a new image starts with none (a project brings its own).
+const edit = { tool: 'off', eraserMm: 3, redo: [], stroke: null };
+state.edit = edit;   // for driving the app from DevTools / the CDP harness
+
+const EDIT_HELP = {
+  off: 'Pick a tool, then drag on the preview. Edits are applied again whenever the settings change, and saved in projects.',
+  erase: 'Drag over edges to cut them away (the Edges view shows what is left).',
+  draw: 'Drag to draw a new edge. An end that starts or stops on an edge joins it.',
+};
+
+function setTool(t) {
+  edit.tool = t;
+  for (const b of document.querySelectorAll('#editSeg button')) b.setAttribute('aria-pressed', String(b.dataset.tool === t));
+  $('eraserRow').hidden = t !== 'erase';
+  if (t !== 'off') { setPicking(false); showFor('edges'); }
+  $('view').style.cursor = t === 'off' ? 'crosshair' : 'cell';
+  renderEditNote();
+}
+
+function renderEditNote() {
+  const n = state.s.edits.length, plan = state.plan;
+  // only from a plan made from these very edits: until the next one arrives (or
+  // when a settings check stops the run) the last plan's count is for others
+  const current = plan && state.planEdits === JSON.stringify(state.s.edits);
+  const idle = current && n > plan.stats.edits ? ` (${n - plan.stats.edits} changed nothing)` : '';
+  $('editNote').textContent = `${EDIT_HELP[edit.tool]} ${n ? `${n} ${n === 1 ? 'edit' : 'edits'}${idle}.` : ''}`;
+  $('undoEdit').disabled = !n;
+  $('redoEdit').disabled = !edit.redo.length;
+  $('clearEdits').disabled = !n;
+}
+
+function pushEdit(e) {
+  state.s.edits.push(e);
+  edit.redo = [];
+  renderEditNote();
+  scheduleRun(0);
+}
+
+function undoEdit() {
+  if (!state.s.edits.length) return;
+  edit.redo.push(state.s.edits.pop());
+  renderEditNote();
+  scheduleRun(0);
+}
+
+function redoEdit() {
+  if (!edit.redo.length) return;
+  state.s.edits.push(edit.redo.pop());
+  renderEditNote();
+  scheduleRun(0);
+}
+
+function bindEdits() {
+  for (const b of document.querySelectorAll('#editSeg button')) b.addEventListener('click', () => setTool(b.dataset.tool));
+  $('undoEdit').addEventListener('click', undoEdit);
+  $('redoEdit').addEventListener('click', redoEdit);
+  $('clearEdits').addEventListener('click', () => {
+    if (!state.s.edits.length) return;
+    // Redo pops from the end: the cleared edits go on top, first edit last, so Redo
+    // brings them back in their order
+    edit.redo = edit.redo.concat(state.s.edits.slice().reverse());
+    state.s.edits = [];
+    renderEditNote();
+    scheduleRun(0);
+  });
+  $('eraserMm').addEventListener('input', () => { const v = toMm(parseFloat($('eraserMm').value), state.units); if (v > 0) edit.eraserMm = v; });
+  document.addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey || e.metaKey) || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
+    const k = e.key.toLowerCase();
+    if (k === 'z' && !e.shiftKey) { e.preventDefault(); undoEdit(); }
+    else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); redoEdit(); }
+  });
+  // a stroke: drawn live on the preview, kept as an edit when the pointer lifts
+  const canvas = $('view');
+  const at = (e) => {
+    const r = canvas.getBoundingClientRect(), plan = state.plan;
+    return [((e.clientX - r.left) / r.width) * plan.piece.W, ((e.clientY - r.top) / r.height) * plan.piece.H];
+  };
+  const ink = () => {
+    const ctx = canvas.getContext('2d');
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    if (edit.tool === 'erase') { ctx.strokeStyle = '#e0303f66'; ctx.lineWidth = 2 * edit.eraserMm; } else { ctx.strokeStyle = '#1a9e3a'; ctx.lineWidth = Math.max(0.4, state.s.lineWidth); }
+    return ctx;
+  };
+  canvas.addEventListener('pointerdown', (e) => {
+    if (edit.tool === 'off' || !state.plan || e.button !== 0) return;
+    const [x, y] = at(e);
+    edit.stroke = [r3(x), r3(y)];
+    canvas.setPointerCapture(e.pointerId);
+    const ctx = ink();
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 1e-3, y); ctx.stroke();
+    e.preventDefault();
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!edit.stroke) return;
+    const [x, y] = at(e), p = edit.stroke;
+    const lx = p[p.length - 2], ly = p[p.length - 1];
+    // enough points to follow the hand, few enough to keep
+    if (Math.hypot(x - lx, y - ly) < (edit.tool === 'erase' ? edit.eraserMm / 3 : 0.4)) return;
+    p.push(r3(x), r3(y));
+    const ctx = ink();
+    ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(x, y); ctx.stroke();
+  });
+  const finish = () => {
+    if (!edit.stroke) return;
+    // kept on the image (core/edits.js), placed by the plan the stroke was drawn on
+    const R = state.plan.imageRect;
+    const pts = edit.stroke.map((v, i) => r6(i % 2 ? (v - R.y) / R.h : (v - R.x) / R.w));
+    edit.stroke = null;
+    if (edit.tool === 'erase') pushEdit({ op: 'erase', r: r6(edit.eraserMm / R.w), pts });
+    else if (pts.length >= 4) pushEdit({ op: 'draw', pts });
+    else paint();   // a click with the pencil draws nothing
+  };
+  canvas.addEventListener('pointerup', finish);
+  canvas.addEventListener('pointercancel', finish);
+}
+
 // --------------------------------------------------------------- the canvas
 function bindCanvas() {
   const canvas = $('view');
@@ -664,15 +839,16 @@ function bindCanvas() {
   });
   canvas.addEventListener('mouseleave', () => { $('hint').textContent = HINTS[state.view] || ''; });
   canvas.addEventListener('click', (e) => {
-    if (!state.plan || !state.picking) return;
+    if (!state.plan || !state.picking || edit.tool !== 'off') return;
     const [x, y] = at(e);
-    state.s.start = { x: r3(x), y: r3(y) };
+    state.s.start = { x: r6(x / state.plan.piece.W), y: r6(y / state.plan.piece.H) };   // fractions of the canvas
     setPicking(false);
     scheduleRun(0);
   });
 }
 
 const r3 = (v) => Math.round(v * 1000) / 1000;
+const r6 = (v) => Math.round(v * 1e6) / 1e6;   // a fraction of the image: 0.3 µm on a 300 mm drawing
 
 // ------------------------------------------------------------------- stats
 function setStat(id, text, cls = '') {
@@ -715,7 +891,6 @@ function renderFigures() {
     row('Crossings', String(st.crossings)),
     row('Edges found', `${st.chains} chains in ${st.components} ${st.components === 1 ? 'piece' : 'pieces'}`),
   ];
-  if (state.s.join === 'tsp') rows.push(row('Jumps', String(st.jumps ?? 0)));
   $('figs').innerHTML = `<tbody>${rows.join('')}</tbody>`;
   $('notes').textContent = plan.notes.map((n) => n.charAt(0).toUpperCase() + n.slice(1) + '.').join(' ');
 }
@@ -740,7 +915,7 @@ function bindExports() {
     $('printDlg').showModal();
   });
   $('exportBends').addEventListener('click', () => {
-    if (state.plan) downloadFile(bendCSV(bendList(state.plan.path)), `${fileBase()}-bends.csv`, 'text/csv');
+    if (planBends()) downloadFile(bendCSV(bendList(state.plan.path)), `${fileBase()}-bends.csv`, 'text/csv');
   });
   for (const id of ['paperSize', 'pSummary', 'pFit', 'pTemplate', 'pBends']) $(id).addEventListener('change', updatePrintNote);
   $('pTemplate').addEventListener('change', () => { $('pTicks').disabled = $('pBendNums').disabled = !$('pTemplate').checked; });
@@ -752,7 +927,7 @@ function bindExports() {
       paper: $('paperSize').value, units: state.units, title: `${state.imageName} — single-line drawing`,
       summary: $('pSummary').checked, fit: $('pFit').checked, template: $('pTemplate').checked,
       previewURL: renderPNG(plan, 'drawing', 1400), lineWidth: state.s.lineWidth, minRadius: state.s.minRadius,
-      ticks: $('pTicks').checked, bendNums: $('pBendNums').checked, bendTable: $('pBends').checked, tickMm: state.disp.tickMm, markSize: state.disp.markSize,
+      ticks: $('pTicks').checked, bendNums: planBends() && $('pBendNums').checked, bendTable: planBends() && $('pBends').checked, tickMm: state.disp.tickMm, markSize: state.disp.markSize,
     });
     const w = window.open('', '_blank');
     if (!w) { setStatus('the browser blocked the new window: allow pop-ups for this page', 'bad'); return; }
@@ -768,8 +943,10 @@ function updatePrintNote() {
   if (!plan) return;
   const room = printable(PAPERS[$('paperSize').value]);
   const pw = pageWindows(plan.piece.W, plan.piece.H, room.w, room.h);
-  const pages = ($('pSummary').checked ? 1 : 0) + ($('pFit').checked ? 1 : 0) + ($('pTemplate').checked ? pw.windows.length : 0);
-  $('printNote').textContent = `${pages} pages${$('pTemplate').checked ? ` (the 1:1 template on ${pw.rows} × ${pw.cols})` : ''}. ` +
+  const table = planBends() && $('pBends').checked ? bendTablePages(bendCount(plan), PAPERS[$('paperSize').value]) : 0;
+  const pages = ($('pSummary').checked ? 1 : 0) + ($('pFit').checked ? 1 : 0) + ($('pTemplate').checked ? pw.windows.length : 0) + table;
+  $('printNote').textContent = `${pages} ${pages === 1 ? 'page' : 'pages'}${$('pTemplate').checked ? ` (the 1:1 template on ${pw.rows} × ${pw.cols})` : ''}` +
+    `${table ? `, the bend table on ${table}` : ''}. ` +
     'Print at 100% (actual size): each 1:1 page has a 50 mm bar to check.';
 }
 
@@ -807,8 +984,10 @@ function loadImage(url, maxDim = 4000) {
   });
 }
 
+/** keepStart: the start point and edits already set are this image's (a project's). */
 function setImage(rgba, name, src, keepStart = false) {
-  if (!keepStart) state.s.start = null;
+  if (!keepStart) { state.s.start = null; state.s.edits = []; }
+  edit.redo = [];   // undone strokes belong to the image they were drawn on, even when a project brings its own
   stopAnim();
   state.anim.t = 1;
   $('progress').value = '1000';
@@ -833,11 +1012,17 @@ function updateToned() {
   state.toned = c;
 }
 
-async function loadSample(kind, keepStart = false) {
+/** A sample's pixels: a bundled photo, or (if that fails to load) the procedural sphere. */
+async function samplePixels(kind) {
   if (kind === 'monalisa' || kind === 'rhino') {
-    try { setImage(await loadImage(`assets/${kind}.jpg`), kind, { kind: 'sample', name: kind }, keepStart); return; } catch { kind = 'sphere'; }
+    try { return { rgba: await loadImage(`assets/${kind}.jpg`), kind }; } catch { kind = 'sphere'; }
   }
-  setImage(generateSample(kind).color, kind, { kind: 'sample', name: kind }, keepStart);
+  return { rgba: generateSample(kind).color, kind };
+}
+
+async function loadSample(kind, keepStart = false) {
+  const sm = await samplePixels(kind);
+  setImage(sm.rgba, sm.kind, { kind: 'sample', name: sm.kind }, keepStart);
 }
 
 function bindImage() {
@@ -893,24 +1078,46 @@ function applySettings(units, s, disp) {
   $('paper').value = disp.paper;
   $('ticks').checked = disp.ticks;
   $('bendNums').checked = disp.bendNums;
+  showBendControls();
   $('preset').value = state.preset;
   renderStartNote();
   save();
 }
 
 async function applyProject(p, problems) {
+  // the image first: if it cannot be read, nothing of the project is applied (its
+  // start point and edits would land on the image already open)
+  let rgba = null, name = null, src = p.image;
+  if (p.image && p.image.kind === 'sample') {
+    const sm = await samplePixels(p.image.name);
+    rgba = sm.rgba; name = sm.kind; src = { kind: 'sample', name: sm.kind };
+  } else if (p.image) {
+    rgba = await loadImage(p.image.dataURL);
+    name = p.image.name.replace(/\.[^.]+$/, '') || 'drawing';
+  }
+  if (!rgba) {
+    // the start point and edits belong to the project's image: not to this one
+    const dropped = p.settings.start || p.settings.edits.length;
+    p.settings.start = null; p.settings.edits = [];
+    if (dropped) problems.push('its start point and edge edits need its image, so they are left out');
+  }
   state.preset = 'custom';
   applySettings(p.units, p.settings, p.display);
   const note = () => (problems.length ? ` (with problems: ${problems.join('; ')})` : '');
-  if (!p.image) { run(); setStatus(`project opened without an image${note()}`, 'warn'); return; }
-  if (p.image.kind === 'sample') await loadSample(p.image.name, true);
-  else setImage(await loadImage(p.image.dataURL), p.image.name.replace(/\.[^.]+$/, '') || 'drawing', p.image, true);
+  if (!rgba) { run(); setStatus(`project opened without an image${note()}`, 'warn'); return; }
+  setImage(rgba, name, src, true);
   if (problems.length) setStatus(`project opened${note()}`, 'warn');
 }
 
 function resetControls() {
-  if (!window.confirm('Reset every control to its default?\n\nThe image stays; the start point is cleared.')) return;
+  const n = state.s.edits.length;
+  const what = n
+    ? `the start point and the ${n} edge ${n === 1 ? 'edit' : 'edits'} are cleared (Redo brings the edits back)`
+    : 'the start point is cleared';
+  if (!window.confirm(`Reset every control to its default?\n\nThe image stays; ${what}.`)) return;
   state.preset = 'custom';
+  // as Clear: the edits go on the redo stack, first edit last, so Redo brings them back in order
+  edit.redo = edit.redo.concat(state.s.edits.slice().reverse());
   applySettings('mm', freshSettings(), { ...DISPLAY });
   $('zoom').value = '1';
   setView('drawing');
@@ -1081,6 +1288,8 @@ function init() {
   bindDisplay();
   bindViews();
   bindTabs();
+  bindEdits();
+  setTool('off');
   bindAnim();
   bindCanvas();
   bindExports();
