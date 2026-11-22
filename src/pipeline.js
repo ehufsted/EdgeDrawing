@@ -5,7 +5,7 @@
 //   B  the edges (core/edges.js) -> the edge graph, cleaned to the level of
 //      detail (core/graph.js)
 //   E  hand edits: erased and drawn edges (core/edits.js)
-//   C  one line through it: Eulerian or travelling salesman (core/route.js)
+//   C  one line through it, Eulerian (core/route.js)
 //   D  straights and arcs at the smallest bend radius (with the bend options of
 //      core/bends.js), and the measurements
 //      (core/arcs.js)
@@ -22,6 +22,7 @@
 //   { piece: {W, H}, imageRect, grid: {w, h, sx, sy},
 //     graph: {nodes: [{x, y, deg}], edges: [pts]}    the cleaned edges, before joining
 //     path: {x0, y0, segs}                             core/arcs.js: the one line
+//     refitted                                         made with Fewer bends (its arcs are bends to number)
 //     start, end: {x, y}, tight: [{x, y, r}], crossings: [{x, y}],
 //     stats, notes }
 
@@ -35,7 +36,7 @@ import { routeGraph } from './core/route.js';
 import { pathStats, samplePath, crossings, routePolyline } from './core/arcs.js';
 import { fitLine, tightPlaces, measureStray } from './core/bends.js';
 import { refitPath } from './core/refit.js';
-import { applyEdits } from './core/edits.js';
+import { applyEdits, editsInMm } from './core/edits.js';
 
 /**
  * @param {{width,height,data}} rgba
@@ -60,12 +61,12 @@ export function runPipeline(rgba, settings, opts = {}) {
 
   // A: the work raster
   const style = s.style || defaultStyle();
-  const keyA = [opts.imageKey ?? null, s.gamma, s.brightness, s.saturation, s.widthMm, s.heightMm, s.precision, chainOf(style)];
+  const { keyA, keyB } = edgeKeys(s, opts.imageKey);
   const A = stage('A', keyA, () => {
     progress('reading the image');
     const toned = applyTone(rgba, s.gamma, s.brightness, s.saturation);
     const geo = pieceGeometry(toned, s);
-    const r = workRaster(toned, geo, PRECISION[s.precision] || PRECISION.normal);
+    const r = workRaster(toned, geo, Object.hasOwn(PRECISION, s.precision) ? PRECISION[s.precision] : PRECISION.normal);
     const filtered = applyStyle(r.rgba, style, geo.W, (label) => progress(`style: ${label}`));
     const n = r.w * r.h, d = filtered.data, lum = new Float32Array(n);
     for (let i = 0, q = 0; i < n; i++, q += 4) lum[i] = luminance(d[q], d[q + 1], d[q + 2]) / 255;
@@ -75,11 +76,7 @@ export function runPipeline(rgba, settings, opts = {}) {
   const px = Math.sqrt(sx * sy);
 
   // B: the edge graph
-  // a line cannot bend round a detail much smaller than its bend: smoothed at two radii
-  // at least, or (bendSmooth 'tight') only where it turns tighter than the bend
-  const tightOnly = s.bendSmooth === 'tight' && s.minRadius > 0;
-  const smooth = tightOnly ? 0 : 2 * s.minRadius, tight = tightOnly ? s.minRadius : 0;
-  const keyB = [keyA, s.edgeScale, s.edgeAmount, s.minFeature, s.minLength, s.simplify, smooth, tight];
+  const { smooth, tight } = edgeSmoothing(s);
   const B = stage('B', keyB, () => {
     progress('finding edges');
     const E = cannyEdges(A.lum, w, h, s.edgeScale / px, s.edgeAmount);
@@ -89,22 +86,25 @@ export function runPipeline(rgba, settings, opts = {}) {
     return { graph: g, high: E.high };
   });
 
-  // E: hand edits to the edges (core/edits.js): erased and drawn, before joining
+  // E: hand edits to the edges (core/edits.js): erased and drawn, before joining.
+  // Kept on the image, placed on the canvas where the image lies now (keyB holds
+  // the canvas size)
   const edits = s.edits || [];
   const keyE = [keyB, edits];
   const E = stage('E', keyE, () => {
     if (!edits.length) return { graph: B.graph, drawn: new Set(), applied: 0 };
     progress('applying edits');
-    const r = applyEdits(B.graph, edits, { minFeature: s.minFeature, simplify: s.simplify });
+    const r = applyEdits(B.graph, editsInMm(edits, geo.imageRect), { minFeature: s.minFeature, simplify: s.simplify });
     return { graph: { nodes: r.nodes, edges: r.edges, stats: B.graph.stats }, drawn: r.drawn, applied: r.applied };
   });
 
   // C: one line
-  const start = s.start && isFinite(s.start.x) && isFinite(s.start.y) ? { x: s.start.x, y: s.start.y } : null;
-  const keyC = [keyE, s.join, s.oddJoin, start, s.closed, s.join === 'euler' ? s.walk : null];
+  // the start is kept as a fraction of the canvas (across, down), so a new size keeps it in its place
+  const start = s.start && isFinite(s.start.x) && isFinite(s.start.y) ? { x: s.start.x * geo.W, y: s.start.y * geo.H } : null;
+  const keyC = [keyE, s.retrace, start, s.closed, s.walk];
   const C = stage('C', keyC, () => {
-    progress(s.join === 'tsp' ? 'ordering the strokes' : 'joining into one line');
-    return routeGraph(E.graph, { join: s.join, oddJoin: s.oddJoin, start, closed: s.closed, walk: s.walk });
+    progress('joining into one line');
+    return routeGraph(E.graph, { retrace: s.retrace, start, closed: s.closed, walk: s.walk });
   });
 
   // D: straights and arcs
@@ -146,9 +146,9 @@ export function runPipeline(rgba, settings, opts = {}) {
   if (edits.length > E.applied) notes.push(`${edits.length - E.applied} of ${edits.length} edits changed nothing (nothing to erase there, or a line too short to draw)`);
   const L = (mm) => (mm >= 1000 ? `${(mm / 1000).toFixed(2)} m` : `${Math.round(mm)} mm`);
   if (!g.edges.length) notes.push('no edges found: lower the edge scale or raise the edge amount (or the image has no edges stronger than 4% contrast)');
-  if (stats.components > 1 && s.join === 'euler') notes.push(`${stats.components} separate pieces, joined by ${stats.bridges} ${stats.bridges === 1 ? 'bridge' : 'bridges'}`);
+  if (stats.components > 1) notes.push(`${stats.components} separate pieces, joined by ${stats.bridges} ${stats.bridges === 1 ? 'bridge' : 'bridges'}`);
   if (st.retrace > 0) notes.push(`${L(st.retrace)} of the line goes over itself again (${Math.round((100 * st.retrace) / st.length)}%): two wires side by side there`);
-  if (st.join > 0) notes.push(`${L(st.join)} of the line is not in the image (${s.join === 'tsp' ? 'jumps between strokes' : 'bridges and joins'})`);
+  if (st.join > 0) notes.push(`${L(st.join)} of the line is not in the image (bridges and joins)`);
   if (D.tight.length) notes.push(`${D.tight.length} ${D.tight.length === 1 ? 'corner is' : 'corners are'} tighter than the ${s.minRadius} mm bend radius (the Problems view shows where): raise Smallest feature, or turn on corner loops`);
   if (D.loops) notes.push(`${D.loops} corner ${D.loops === 1 ? 'loop' : 'loops'}`);
   if (D.crossings.length) notes.push(`the wire crosses itself ${D.crossings.length} ${D.crossings.length === 1 ? 'time' : 'times'}: it lifts by its thickness at each`);
@@ -164,6 +164,7 @@ export function runPipeline(rgba, settings, opts = {}) {
       drawn: [...E.drawn],   // which edges came from the pencil
     },
     path: { x0: r4(D.path.x0), y0: r4(D.path.y0), segs: D.path.segs.map(roundSeg) },
+    refitted: s.bendTol > 0 && D.path.segs.length > 0,   // refitted as fewer bends (core/refit.js): bends a person can number
     start: C.start, end: C.end,
     tight: D.tight.map((t) => ({ x: r4(t.x), y: r4(t.y), r: r4(t.r) })),
     strayAt: D.stray.at ? { x: r4(D.stray.at.x), y: r4(D.stray.at.y), d: r4(D.stray.max) } : null,
@@ -171,6 +172,29 @@ export function runPipeline(rgba, settings, opts = {}) {
     stats,
     notes,
   };
+}
+
+/**
+ * A line cannot bend round a detail much smaller than its bend: the edges are
+ * smoothed at two radii at least, or (bendSmooth 'tight') only where they turn
+ * tighter than the bend.
+ */
+function edgeSmoothing(s) {
+  const tightOnly = s.bendSmooth === 'tight' && s.minRadius > 0;
+  return { smooth: tightOnly ? 0 : 2 * s.minRadius, tight: tightOnly ? s.minRadius : 0 };
+}
+
+/**
+ * The keys of stages A (the work raster) and B (the edge graph): what they are
+ * made from. Exported so the app can tell whether a run in progress makes the
+ * same edges a new one needs (then it is worth letting it finish).
+ */
+export function edgeKeys(settings, imageKey) {
+  const s = { ...DEFAULTS, ...settings };
+  const { smooth, tight } = edgeSmoothing(s);
+  const keyA = [imageKey ?? null, s.gamma, s.brightness, s.saturation, s.widthMm, s.heightMm, s.precision, chainOf(s.style || defaultStyle())];
+  const keyB = [keyA, s.edgeScale, s.edgeAmount, s.minFeature, s.minLength, s.simplify, smooth, tight];
+  return { keyA, keyB };
 }
 
 const r4 = (v) => Math.round(v * 10000) / 10000;

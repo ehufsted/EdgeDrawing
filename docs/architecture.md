@@ -9,19 +9,18 @@ header explains its reasoning; this page is what holds across modules.
 shim/      image resize and blur, mulberry32 (copied from PaintByNumbers)
 core/      units (settings, MEDIA), color, raster (the work grid), style (the
            filter chain), edges (Canny + thinning), graph (pixels -> junctions
-           and chains, clean-up, gap linking), route (one line: Eulerian or
-           TSP), arcs (straights and arcs, measurements), bends (keeping to
+           and chains, clean-up, gap linking), route (one line, Eulerian),
+           arcs (straights and arcs, measurements), bends (keeping to
            the bend: Dubins joins, merge / remove / optimize, the stray),
            dubins (shortest paths under a turning radius), svg, printout,
-           project; and, copied, kuwahara, steer, features, geom
+           project; and, copied, kuwahara, steer, features
 pipeline.js  the whole chain, with its stage cache; imports core/ only
 worker.js  wraps pipeline.js and keeps the image and the cache between runs
 app.js     UI; the only DOM user (plus svg.downloadFile)
 ```
 
-Dependencies run downward only. There is no methods/ registry yet: the two ways
-of joining (Eulerian and TSP) are options of one route stage, as both start from
-the same edge graph and end in the same polyline.
+Dependencies run downward only. There is no methods/ registry yet: there is one
+way of joining (Eulerian), with retracing an option of it.
 
 ## One grid, then millimeters
 
@@ -43,8 +42,8 @@ path through `<use>`. The harness checks continuity and tangency of every plan,
 and that the Eulerian route draws each edge of the image exactly once as 'edge'.
 
 Every segment carries a KIND: 'edge' (the image's edge, first time), 'retrace'
-(drawn again over one) or 'join' (not in the image: bridges, new straights,
-jumps). The figures, the Route and Problems views and the notes all read it.
+(drawn again over one) or 'join' (not in the image: bridges and new
+straights). The statistics, the Route and Problems views and the notes all read it.
 
 ## Bends
 
@@ -234,4 +233,55 @@ the smallest feature) of an edge joins it, at a node within half that, else by
 splitting the edge at the nearest point. Ends are resolved one after the other
 (the second sees the first's split), and never against the new line itself.
 Edits belong to one image (cleared with a new one, kept in projects, not in
-the browser's stored settings).
+the browser's stored settings), and are stored ON it: points as fractions of
+the whole image (imageRect), the eraser's radius as a fraction of its width, so
+a new canvas size or crop moves them with the picture. Stage E turns them into
+canvas mm (editsInMm) where the image lies now. The start point is kept the
+same way, as a fraction of the canvas (across, down), and stage C places it.
+
+## Joining: one way, retracing an option (2026-11-21)
+
+The One line section had Eulerian or TSP, and for Eulerian three ways back to a
+branch (retrace, new straight, whichever is shorter). "Whichever is shorter" was
+wrong: straights were only looked for between odd ends within 60 mm, retraces at
+any distance, so a far pair could only retrace (495 mm of retrace on the 300 mm
+sphere, where straights of about 80 mm would do). Fixed pair by pair, it can
+hardly ever retrace (a straight is never longer than a way along lines; it does
+where they tie, on a straight run, as the retrace keeps to the image), so it
+draws the same line as "new straight", within 1%.
+
+Measured then on the samples (default steering; length, retraced, outside the
+image, mm):
+
+| sample    | shorter (fixed)  | TSP          | always retrace      |
+|-----------|------------------|--------------|---------------------|
+| sphere    | 985, 0, 85       | 981, 0, 83   | 1386, 495, 3        |
+| rings     | 2171, 0, 135     | 2142, 0, 106 | 2234, 75, 132       |
+| Mona Lisa | 8024, 18, 1939   | 8077, 0, 2097| 11890, 5237, 1331   |
+| rhino     | 2781, 2, 515     | 2837, 0, 608 | 4248, 1795, 324     |
+
+TSP drew nearly the same line with more of it outside the image on the
+photographs (8% and 18%) and a worse stray on the rhino (10.9 mm to 7.9), so the
+user chose (on my recommendation) one Eulerian way, "shorter", with one option,
+`retrace` (Retrace lines instead of adding new ones): for a pen, where a
+retraced line does not show, half again as long but a third less of it outside
+the image. The TSP router and its 2-opt were removed.
+
+## Runs that wait (2026-11-21)
+
+A busy worker cannot see a message, so a run is cancelled by terminating it, and
+the stage cache goes with it. Every change made while a run was going (dragging
+a slider through a 5 s Mona Lisa run) used to start over from the image. Now a
+run waits for the one in progress when both make the same edges (pipeline.js
+edgeKeys: the keys of stages A and B); that one fills the cache, and the waiting
+settings (the latest of however many changes) run when it is over, taking only
+the later stages. A run that needs other edges still cancels, as the one in
+progress would make nothing it can use.
+
+## Bend numbers only with Fewer bends (2026-11-21)
+
+The user's choice: Show bend numbers, Bend table CSV and the printout's bend
+numbers and bend table show only with Fewer bends above 0. The plan says
+whether it was refitted (`refitted`), and the marks and files follow the plan,
+so while a refit is on its way the old plan's thousands of arcs are not
+numbered. The Figures section is now Statistics.

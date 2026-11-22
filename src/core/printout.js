@@ -39,6 +39,12 @@ const PREVIEW_H = 150;          // mm, the tallest the summary's preview may be
 /** The printable area of a page, mm. */
 export const printable = (paper) => ({ w: paper.w - 2 * MARGIN, h: paper.h - 2 * MARGIN - CAPTION - 8 });
 
+/** Rows of the bend table on one page of printable area `room`. */
+const bendRowsPerPage = (room) => Math.max(10, Math.floor((room.h - 14) / 5.2));
+
+/** How many pages the bend table of `n` bends takes (one, even with none). */
+export const bendTablePages = (n, paper) => Math.max(1, Math.ceil(n / bendRowsPerPage(printable(paper))));
+
 /**
  * How a w × h drawing splits onto pages of printable pw × ph: {cols, rows, windows}.
  * Windows overlap by OVERLAP mm and together cover the drawing exactly.
@@ -106,7 +112,7 @@ export function planHTML(plan, opts = {}) {
       row('Line length', longText(st.length, units)) +
       row('…drawing the image\'s edges', longText(st.edge, units) + pct(st.edge)) +
       row('…over a line again', longText(st.retrace, units) + pct(st.retrace)) +
-      row('…not in the image (bridges, joins, jumps)', longText(st.join, units) + pct(st.join)) +
+      row('…not in the image (bridges, joins)', longText(st.join, units) + pct(st.join)) +
       row('Bends (arcs)', String(st.bends)) +
       row('Tightest bend radius', `${L(st.minR, units === 'in' ? 3 : 1)} ${units}`) +
       row('Corners tighter than the smallest radius', String(st.tight)) +
@@ -133,7 +139,7 @@ export function planHTML(plan, opts = {}) {
   if (table) {
     // the bend table: every bend in order, where it starts along the line (the
     // total, as the ticks), its turn, radius and length
-    const per = Math.max(10, Math.floor((room.h - 14) / 5.2));
+    const per = bendRowsPerPage(room);
     const head = '<tr><th class="r">Bend</th><th class="r">Starts at</th><th>Turn</th><th class="r">Radius</th><th class="r">Arc length</th></tr>';
     const total = table.length;
     for (let p0 = 0; p0 < Math.max(1, total); p0 += per) {

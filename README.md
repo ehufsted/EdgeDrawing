@@ -19,19 +19,19 @@ or a length of wire can be bent to.
   radius of a stroke dragged on the preview; *Draw* adds a new edge along the
   stroke, an end that starts or stops on an edge joining it. Edits apply to the
   edges before they are joined, so the one line, its smoothing, bends and marks
-  all follow; they are kept as strokes in mm and applied again whenever the
-  settings change, with Undo / Redo (Ctrl+Z / Ctrl+Y) and Clear, and saved in
+  all follow; they are kept as strokes on the image and applied again whenever
+  the settings change (a new canvas size or crop moves them with the picture), with Undo / Redo (Ctrl+Z / Ctrl+Y) and Clear, and saved in
   projects. A new image starts without them. The Edges view shows drawn edges in
   green.
-- **One line**, two ways:
-  - *Trace through (Eulerian)* draws every edge without lifting. Separate pieces
-    are joined by the shortest bridges (preferring loose ends, which chains
-    strokes end to end). Where edges branch, the line has to get back to a
-    branch it has not drawn: *over a line again* (retracing: hidden on paper,
-    two wires side by side in wire), *by a new straight*, or *whichever is
-    shorter* (the default).
-  - *Jump between (TSP)* draws each edge once, in the shortest order it can
-    find, jumping straight from the end of one to the start of the next.
+- **One line** draws every edge without lifting (an Eulerian trail). Separate
+  pieces are joined by the shortest bridges (preferring loose ends, which chains
+  strokes end to end). Where edges branch, the line has to get back to a branch
+  it has not drawn, by the shorter way: nearly always a new straight, as going
+  back along the lines is longer unless they run straight there.
+  - *Retrace lines instead of adding new ones* gets back over lines already
+    drawn instead. With a pen a retraced line does not show, so far less of the
+    line is outside the image, but it is much longer (half again on the
+    photographs); in wire it is two wires side by side.
   - *Start*: automatic (the loose end nearest the top-left corner) or picked on
     the preview. *End where it starts* closes the line.
 - **Line:** *Line width* (1.2 mm wire by default) and the *Smallest bend*
@@ -77,8 +77,10 @@ or a length of wire can be bent to.
   length since the last tick, so a slip at one bend does not shift the numbers
   after it. *Show bend numbers* numbers each bend in drawing order with its turn (R clockwise or L anticlockwise as the line runs, seen on
   the page, and its angle), a bar across the line where it starts. Labels are
-  placed clear of the line and of each other where there is room.
-- **The line's figures:** length (how much draws the image's edges, goes over a
+  placed clear of the line and of each other where there is room. Bend numbers
+  and the bend table are offered only with *Fewer bends* above 0: without it
+  the line is thousands of short arcs.
+- **Statistics:** length (how much draws the image's edges, goes over a
   line again, or is not in the image), bends, the tightest bend, places tighter
   than the smallest bend, loops, how far the line strays from the edges (at
   most and on average), crossings.
@@ -98,7 +100,7 @@ be served over HTTP, not opened as a file.)
 
 The sidebar has three tabs: **Picture** (image, tone, style, canvas, edges &
 detail), **Line** (joining, line width and bend, smoothing) and **Make** (marks
-for making it, printout and files, and the line's figures, collapsed). The
+for making it, printout and files, and the line's statistics, collapsed). The
 experimental settings show only with **Show experiments** in the header; while hidden, any
 in use is named in a note on the Line tab.
 
@@ -127,8 +129,8 @@ default), Draft (1000) or Normal (1600).
 
 | Button | What |
 | --- | --- |
-| Print / PDF… | The figures with a preview and how to draw it; the whole drawing on one page; the drawing at 1:1 split across pages that overlap by 10 mm, with the start and end marked, a 50 mm bar to check the scale, and (each ticked by default) the distance ticks and the numbered bends; the bend table (each bend: where it starts along the line, its turn, radius and arc length). Print at 100%. |
-| Bend table CSV | The same table, one row per bend. |
+| Print / PDF… | The statistics with a preview and how to draw it; the whole drawing on one page; the drawing at 1:1 split across pages that overlap by 10 mm, with the start and end marked, a 50 mm bar to check the scale, and (each ticked by default) the distance ticks and, with Fewer bends, the numbered bends and the bend table (each bend: where it starts along the line, its turn, radius and arc length). Print at 100%. |
+| Bend table CSV | With Fewer bends: the same table, one row per bend. |
 | Drawing SVG | The line at true size, as ONE path of straights (L) and arcs (A), stroked at the line width: for a plotter, or to import. |
 | PNG | The current view. |
 

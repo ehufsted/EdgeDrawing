@@ -34,10 +34,9 @@ const NUMS = {
 };
 /** The settings that are one of a few words. */
 const ENUMS = {
-  join: ['euler', 'tsp'], oddJoin: ['retrace', 'new', 'shorter'],
   joinShape: ['straight', 'dubins'], walk: ['step', 'pairs'], smoothing: ['pid', 'fourier', 'optimize', 'none'], bendFix: ['none', 'merge', 'remove'], bendSmooth: ['uniform', 'tight'],
 };
-const BOOLS = ['closed', 'loops'];
+const BOOLS = ['closed', 'loops', 'retrace'];
 
 // ticks, bendNums: show the distance ticks, the numbered bends (core/marks.js) on the preview; tickMm: tick spacing; markSize: label size, mm
 export const DISPLAY = { ink: '#1a1a1a', paper: '#ffffff', ticks: false, bendNums: false, tickMm: 100, markSize: 2.5 };
@@ -89,7 +88,8 @@ export function parseProject(json) {
   const ns = normalizeStyle(src.style);
   settings.style = ns.style;
   problems.push(...ns.problems);
-  if (src.precision === undefined || PRECISION[src.precision]) settings.precision = src.precision ?? DEFAULTS.precision;
+  // own keys only: 'constructor' or 'toString' is on every object
+  if (src.precision === undefined || Object.hasOwn(PRECISION, src.precision)) settings.precision = src.precision ?? DEFAULTS.precision;
   else { settings.precision = DEFAULTS.precision; problems.push(`precision: unusable, using ${DEFAULTS.precision}`); }
 
   const d = o.display && typeof o.display === 'object' ? o.display : {};

@@ -18,6 +18,15 @@ export function run() {
   const c1 = continuity(p1.path);
   check('sphere: a line was drawn', p1.path.segs.length > 10 && p1.stats.length > 100, `${p1.path.segs.length} segments, ${num(p1.stats.length, 0)} mm`);
   check('sphere: one continuous line, G1', c1.gap < 1e-3 && c1.kink < 1e-3, `gap ${c1.gap.toExponential(1)} mm, kink ${c1.kink.toExponential(1)} rad`);
+  // odd ends joined by the shorter way, pair by pair: a straight is never longer than a
+  // way along lines, so on the 300 mm sphere, whose odd ends are far apart (past where
+  // straights were looked for, so once only retraced), nearly all are straights; set to
+  // retrace, the line is longer but less of it is outside the image
+  const sh = runPipeline(sphere, { ...base, widthMm: 300 }, {}), rt = runPipeline(sphere, { ...base, widthMm: 300, retrace: true }, {});
+  check('sphere: the shorter way retraces almost nothing, and is shorter than retracing', sh.stats.retrace < 0.01 * sh.stats.length && sh.stats.length < rt.stats.length,
+    `${num(sh.stats.length, 0)} mm, ${num(sh.stats.retrace, 0)} retraced; retracing ${num(rt.stats.length, 0)} mm`);
+  check('...and retracing leaves less of the line outside the image', rt.stats.join < sh.stats.join,
+    `${num(rt.stats.join, 0)} mm outside, against ${num(sh.stats.join, 0)}`);
   const arcs = p1.path.segs.filter((s) => s.k === 'A');
   const under = arcs.filter((a) => a.r < 2 - 1e-3).length;
   check('sphere: arcs under the 2 mm radius only at reported tight corners', under <= p1.tight.length, `${under} arcs under, ${p1.tight.length} reported`);
@@ -33,19 +42,27 @@ export function run() {
 
   // a pen may turn on the spot: with no smallest radius, a kink is allowed only at a corner it could not round
   const rings = generateSample('rings').color;
-  for (const join of ['euler', 'tsp']) {
-    const p = runPipeline(rings, { ...base, join, minRadius: 0.5 }, {});
+  for (const retrace of [false, true]) {
+    const p = runPipeline(rings, { ...base, retrace, minRadius: 0.5 }, {});
     const c = continuity(p.path, 0.01);
-    check(`rings, ${join}: one continuous line, kinks only at reported tight corners`, p.path.segs.length > 10 && c.gap < 1e-3 && c.kinks <= p.stats.sharp,
+    check(`rings, ${retrace ? 'retracing' : 'the shorter way'}: one continuous line, kinks only at reported tight corners`, p.path.segs.length > 10 && c.gap < 1e-3 && c.kinks <= p.stats.sharp,
       `${p.stats.chains} chains, ${num(p.stats.length, 0)} mm, gap ${c.gap.toExponential(1)}, ${c.kinks} kinks, ${p.tight.length} tight`);
-    if (join === 'tsp') check('rings, tsp: nothing retraced', p.stats.retrace === 0, `${num(p.stats.retrace, 1)} mm`);
   }
   // the start: an odd node of the joined graph, which can be a bridge's end, so at least as near as the graph's
+  // (the setting is a fraction of the canvas: 0.75 of this 200 mm square is 150 mm)
   const startAt = { x: 150, y: 150 };
-  const ps = runPipeline(rings, { ...base, start: startAt }, {});
+  const ps = runPipeline(rings, { ...base, start: { x: 0.75, y: 0.75 } }, {});
   const near = Math.hypot(ps.start.x - startAt.x, ps.start.y - startAt.y);
   const any = Math.min(...ps.graph.nodes.filter((n) => n.deg % 2).map((n) => Math.hypot(n.x - startAt.x, n.y - startAt.y)));
   check('a start point: the line starts at least as near it as the nearest odd node', near <= any + 1e-3, `${num(near, 2)} mm away (nearest odd node of the edges ${num(any, 2)})`);
+  // on a canvas twice the size the same setting aims at the same place on the picture,
+  // 300, 300 mm. A closed line may start at any node (the edges' own, or a bridge's), so
+  // at least as near it as the nearest node of the edges
+  const ps2 = runPipeline(rings, { ...base, widthMm: 400, closed: true, start: { x: 0.75, y: 0.75 } }, {});
+  const near2 = Math.hypot(ps2.start.x - 300, ps2.start.y - 300);
+  const any2 = Math.min(...ps2.graph.nodes.map((n) => Math.hypot(n.x - 300, n.y - 300)));
+  check('...and on a canvas twice the size it aims at the same place on the picture (300, 300 mm)', near2 <= any2 + 1e-3,
+    `${num(near2, 2)} mm away (nearest node of the edges ${num(any2, 2)})`);
   // every bend option: still one continuous line, tangent except at the tight corners it reports
   const wire = { ...base, minRadius: 3, lineWidth: 1.2 };
   const variants = [

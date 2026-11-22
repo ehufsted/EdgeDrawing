@@ -53,15 +53,17 @@ export function run() {
   check('project: a tick spacing under 5 mm and a label over 20 mm fall back to the defaults', tiny.tickMm === 100 && tiny.markSize === 2.5, JSON.stringify(tiny));
   const badPrec = parseProject({ app: 'EdgeDrawing', version: 1, settings: { precision: 'huge' } });
   check('project: an unknown precision opens at the default, with a note', badPrec.project.settings.precision === DEFAULTS.precision && badPrec.problems.some((p) => /precision/.test(p)), badPrec.problems.join('; '));
+  const protoPrec = parseProject({ app: 'EdgeDrawing', version: 1, settings: { precision: 'constructor' } });
+  check('project: a precision named like a property every object has ("constructor") is unknown too', protoPrec.project.settings.precision === DEFAULTS.precision && protoPrec.problems.some((p) => /precision/.test(p)), protoPrec.problems.join('; '));
 
   // a project round trip, and bad input mended with reasons
-  const s = { ...DEFAULTS, widthMm: 250, join: 'tsp', oddJoin: 'new', start: { x: 10, y: 20 }, closed: true, pidD: 1.5, loops: true, style: defaultStyle() };
+  const s = { ...DEFAULTS, widthMm: 250, retrace: true, walk: 'pairs', start: { x: 0.1, y: 0.2 }, closed: true, pidD: 1.5, loops: true, style: defaultStyle() };
   const back = parseProject(projectJSON({ image: { kind: 'sample', name: 'rings' }, units: 'in', settings: s, display: { ink: '#123456', paper: '#ffffff' } }));
-  const same = ['widthMm', 'join', 'oddJoin', 'closed', 'pidD', 'loops'].every((k) => back.project.settings[k] === s[k]) &&
-    back.project.settings.start.x === 10 && back.project.units === 'in' && back.project.display.ink === '#123456';
+  const same = ['widthMm', 'retrace', 'walk', 'closed', 'pidD', 'loops'].every((k) => back.project.settings[k] === s[k]) &&
+    back.project.settings.start.x === 0.1 && back.project.units === 'in' && back.project.display.ink === '#123456';
   check('project: settings, start, units and colours survive a round trip', same && back.problems.length === 0, back.problems.join('; '));
-  const bad = parseProject({ app: 'EdgeDrawing', version: 1, settings: { widthMm: -3, join: 'zigzag', minRadius: 'x', pidD: 3 } });
-  check('project: unusable values fall back to defaults, each with a reason', bad.project.settings.widthMm === DEFAULTS.widthMm && bad.project.settings.join === DEFAULTS.join && bad.project.settings.pidD === DEFAULTS.pidD && bad.problems.length >= 4,
+  const bad = parseProject({ app: 'EdgeDrawing', version: 1, settings: { widthMm: -3, walk: 'zigzag', minRadius: 'x', pidD: 3 } });
+  check('project: unusable values fall back to defaults, each with a reason', bad.project.settings.widthMm === DEFAULTS.widthMm && bad.project.settings.walk === DEFAULTS.walk && bad.project.settings.pidD === DEFAULTS.pidD && bad.problems.length >= 4,
     bad.problems.join('; '));
   let refused = false;
   try { parseProject({ app: 'PaintByNumbers', version: 1 }); } catch { refused = true; }

@@ -23,8 +23,8 @@
 Tried on branch `curvature` (2026-11-19): Dubins joins, the paired walk, tight-only
 smoothing, merge / remove / optimize; see docs/architecture.md for the numbers.
 
-- **Direction-aware joins.** With Dubins joins, choose bridges, odd-node pairs
-  and the TSP order by Dubins length (the turn they force), not the straight
+- **Direction-aware joins.** With Dubins joins, choose bridges and odd-node pairs
+  by Dubins length (the turn they force), not the straight
   distance: the loops Dubins joins make where strokes face badly are the cost
   of the best variant now.
 - **U-turns round a peg.** A reversal (a dead end that is retraced, or a hairpin

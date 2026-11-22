@@ -2,12 +2,18 @@
 // graph (core/graph.js) before the line is joined, so the route, the smoothing,
 // the bends and the marks all follow them.
 //
-// EDITS ARE STROKES IN mm, kept in settings.edits and applied in order on every
-// run, so they survive any change that leaves the drawing's size alone (a new
-// edge scale or detail level: an erased area stays erased, a drawn line stays):
+// EDITS ARE STROKES ON THE IMAGE, kept in settings.edits and applied in order on
+// every run, so they survive any change of settings: a new edge scale or detail
+// level, and a new canvas size or crop too (an erased area stays on the same part
+// of the picture). A point is (u, v), the fraction of the way across and down the
+// whole image (pieceGeometry's imageRect, which may reach past the canvas), and
+// the eraser's radius r a fraction of the image's width (the image is never
+// stretched, so one scale serves both ways):
 //
-//   {op: 'erase', r, pts}   every edge within r mm of the stroke is cut away
+//   {op: 'erase', r, pts}   every edge within r of the stroke is cut away
 //   {op: 'draw', pts}       a new edge along the stroke
+//
+// editsInMm turns them into canvas mm for applyEdits, which works in mm only.
 //
 // ERASING. An edge near the stroke is resampled finely (so a long straight is
 // cut where the stroke crosses it, not at its far ends), the points within r of
@@ -25,8 +31,19 @@ import { smoothLine, rdp, polyLength } from './graph.js';
 export const SNAP = 2;   // mm, at least: how near an end must be to an edge to join it
 
 /**
+ * Edits on the image (fractions of it, as stored) as edits in canvas mm.
+ * @param {{x, y, w, h}} rect  pieceGeometry's imageRect, mm
+ */
+export function editsInMm(edits, rect) {
+  return edits.map((e) => {
+    const pts = e.pts.map((v, i) => (i % 2 ? rect.y + v * rect.h : rect.x + v * rect.w));
+    return e.op === 'erase' ? { op: 'erase', r: e.r * rect.w, pts } : { op: e.op, pts };
+  });
+}
+
+/**
  * @param {{nodes:[{x, y}], edges:[{a, b, pts}]}} graph   cleanGraph's (not changed)
- * @param {[object]} edits
+ * @param {[object]} edits   in canvas mm (editsInMm)
  * @param {{minFeature:number, simplify:number}} d  mm
  * @returns {{nodes, edges, drawn:Set, applied:number}}  drawn: the edges that came from the pencil
  */
@@ -152,6 +169,13 @@ function nearestOn(nodes, edges, x, y, reach) {
       if (dd < bd) { bd = dd; best = { e: ei, seg: i / 2, x: qx, y: qy }; }
     }
   });
+  // the nearest point is the edge's own end (an end beyond it, past half the
+  // reach from its node): that node, not a split leaving a piece of no length
+  if (best) {
+    const e = edges[best.e], p = e.pts, n = p.length;
+    if (Math.hypot(best.x - p[0], best.y - p[1]) < 1e-9) return { node: e.a };
+    if (Math.hypot(best.x - p[n - 2], best.y - p[n - 1]) < 1e-9) return { node: e.b };
+  }
   return best;
 }
 
@@ -159,8 +183,11 @@ function nearestOn(nodes, edges, x, y, reach) {
 function splitAt(nodes, edges, ei, seg, x, y) {
   const e = edges[ei], p = e.pts;
   const id = newNode(nodes, x, y);
-  const first = p.slice(0, 2 * seg + 2).concat([x, y]);
-  const second = [x, y].concat(p.slice(2 * seg + 2));
+  // a split on one of the edge's points does not repeat it (nearestOn never
+  // splits at the edge's own ends, so both halves keep a length)
+  const at = (k) => Math.hypot(p[k] - x, p[k + 1] - y) < 1e-9;
+  const first = p.slice(0, 2 * seg + (at(2 * seg) ? 0 : 2)).concat([x, y]);
+  const second = [x, y].concat(p.slice(2 * seg + (at(2 * seg + 2) ? 4 : 2)));
   edges[ei] = { a: e.a, b: id, pts: first, drawn: e.drawn };
   edges.push({ a: id, b: e.b, pts: second, drawn: e.drawn });
   return id;
